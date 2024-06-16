@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "uc-wrapper"
+version = "0.1.0"
+description = "Wrapper for Unity Catalog REST API to expose a Dataframe API to access tables stored in the local filesystem registered in Unity Catalog."
+authors = ["Ville Puuska"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+requests = "^2.32.3"
+polars = "^0.20.31"
+deltalake = "^0.18.1"
+duckdb = "^1.0.0"
+
+
+[tool.poetry.group.dev.dependencies]
+mypy = "^1.10.0"
+pytest = "^8.2.2"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
