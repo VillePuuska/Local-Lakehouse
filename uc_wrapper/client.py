@@ -1,6 +1,13 @@
 import requests
 from .models import Catalog
-from .uc_api_wrapper import health_check, list_catalogs
+from .uc_api_wrapper import (
+    health_check,
+    create_catalog,
+    delete_catalog,
+    list_catalogs,
+    get_catalog,
+    update_catalog,
+)
 
 
 class UCClient:
@@ -36,7 +43,7 @@ class UCClient:
             - id.
         Raises an Exception if a catalog with the name already exists.
         """
-        raise NotImplementedError
+        return create_catalog(self.session, self.uc_url, catalog)
 
     def delete_catalog(self, name: str, force: bool) -> bool:
         """
@@ -47,7 +54,7 @@ class UCClient:
 
         Returns True/False indicating if a catalog was deleted.
         """
-        raise NotImplementedError
+        return delete_catalog(self.session, self.uc_url, name, force)
 
     def list_catalogs(self) -> list[Catalog]:
         """
@@ -59,7 +66,7 @@ class UCClient:
         """
         Returns the info of the catalog with the specified name, if it exists.
         """
-        raise NotImplementedError
+        return get_catalog(self.session, self.uc_url, name)
 
     def update_catalog(self, name: str, catalog: Catalog) -> Catalog | None:
         """
@@ -69,4 +76,4 @@ class UCClient:
             - properties.
         Returns a Catalog with updated information, or None if the catalog did not exist.
         """
-        raise NotImplementedError
+        return update_catalog(self.session, self.uc_url, name, catalog)
