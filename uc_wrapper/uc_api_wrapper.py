@@ -2,8 +2,10 @@
 Functions for handling calling Unity Catalog REST API endpoints and parsing results.
 """
 
+from .exceptions import AlreadyExistsException
 from .models import Catalog
 import requests
+import json
 
 api_path = "/api/2.1/unity-catalog"
 catalog_endpoint = "/catalogs"
@@ -32,7 +34,25 @@ def create_catalog(session: requests.Session, uc_url: str, catalog: Catalog) -> 
         - id.
     Raises an Exception if a catalog with the name already exists.
     """
-    raise NotImplementedError
+    data = {
+        "name": catalog.name,
+        "comment": catalog.comment,
+        "properties": catalog.properties,
+    }
+    url = uc_url + api_path + catalog_endpoint
+    response = session.post(
+        url, data=json.dumps(data), headers={"Content-Type": "application/json"}
+    )
+
+    if not response.ok:
+        response_dict = response.json()
+        if response_dict.get("error_code", "").upper() == "ALREADY_EXISTS":
+            raise AlreadyExistsException(response_dict.get("message", ""))
+        raise Exception(
+            f"Something went wrong. Server response:\n{response_dict.get('message', response.text)}"
+        )
+
+    return Catalog.model_validate_json(response.text)
 
 
 def delete_catalog(
