@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 import datetime
+import uuid
 
 
 class Catalog(BaseModel):
@@ -9,7 +10,7 @@ class Catalog(BaseModel):
 
     name: str
     comment: str | None
-    properties: dict[str, str]
-    created_at: datetime.datetime | None
-    updated_at: datetime.datetime | None
-    id: str | None
+    properties: dict[str, str] = {}
+    created_at: datetime.datetime | None = None
+    updated_at: datetime.datetime | None = None
+    id: uuid.UUID | None = None
