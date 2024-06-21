@@ -9,7 +9,7 @@ class Catalog(BaseModel):
     """
 
     name: str
-    comment: str | None
+    comment: str | None = None
     properties: dict[str, str] = {}
     created_at: datetime.datetime | None = None
     updated_at: datetime.datetime | None = None
