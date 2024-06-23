@@ -22,4 +22,13 @@ Toying with the idea of using Unity Catalog to manage my local structured data a
 
 ## Notes
 - You need to have the Unity Catalog server running locally. See the [Unity Catalog repo](https://github.com/unitycatalog/unitycatalog) for instructions. **No support planned for any kind of authentication.**
+    - Alternatively, if you can build and run containers you can use the Dockerfile in the `tests` directory.
 - Only tables stored in your local filesystem are supported. **No support planned for storing tables e.g. in s3.**
+
+---
+
+## Tests
+- To run integration tests you need
+    - a Python environment with the dev dependencies installed (`poetry install --with dev`),
+    - Docker.
+- Call `pytest` (or `python -m pytest`) from the root of the repo or from the `tests` directory.
