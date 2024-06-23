@@ -1,13 +1,6 @@
 import requests
-from .models import Catalog
-from .uc_api_wrapper import (
-    health_check,
-    create_catalog,
-    delete_catalog,
-    list_catalogs,
-    get_catalog,
-    update_catalog,
-)
+from .models import *
+from .uc_api_wrapper import *
 
 
 class UCClient:
@@ -77,3 +70,21 @@ class UCClient:
         Returns a Catalog with updated information, or None if the catalog did not exist.
         """
         return update_catalog(self.session, self.uc_url, name, catalog)
+
+    def create_schema(self):
+        raise NotImplementedError
+
+    def delete_schema(self):
+        raise NotImplementedError
+
+    def get_schema(self):
+        raise NotImplementedError
+
+    def list_schemas(self, catalog: str) -> list[Schema]:
+        """
+        Returns a list of schemas in the specified catalog from Unity Catalog.
+        """
+        return list_schemas(self.session, self.uc_url, catalog)
+
+    def update_schema(self):
+        raise NotImplementedError

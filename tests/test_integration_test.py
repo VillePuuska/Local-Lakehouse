@@ -26,6 +26,11 @@ def test_full_acceptance_test():
 
             client = UCClient(uc_url)
 
+            assert client.health_check()
+
+            #
+            # catalogs endpoint tests
+            #
             cat_name = "asdasdasdasfdsadgsa"
             cat_comment = "asd"
             catalog = Catalog(
@@ -36,7 +41,6 @@ def test_full_acceptance_test():
             cat_name_update = "asdgnölsavnsaödn"
             catalog_update = Catalog(name=cat_name_update)
 
-            assert client.health_check()
             assert len(client.list_catalogs()) == 1
 
             cat = client.get_catalog("unity")
@@ -73,3 +77,15 @@ def test_full_acceptance_test():
             assert len(client.list_catalogs()) == 1
             assert not client.delete_catalog(cat_name_update, False)
             assert len(client.list_catalogs()) == 1
+
+            #
+            # schemas endpoint tests
+            #
+            default_catalog = "unity"
+            default_schema = "default"
+
+            schemas = client.list_schemas(catalog=default_catalog)
+            assert len(schemas) == 1
+            assert schemas[0].name == default_schema
+            assert schemas[0].catalog_name == default_catalog
+            assert schemas[0].full_name == default_catalog + "." + default_schema

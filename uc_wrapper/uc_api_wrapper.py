@@ -3,12 +3,13 @@ Functions for handling calling Unity Catalog REST API endpoints and parsing resu
 """
 
 from .exceptions import AlreadyExistsException, DoesNotExistException
-from .models import Catalog
+from .models import *
 import requests
 import json
 
 api_path = "/api/2.1/unity-catalog"
 catalog_endpoint = "/catalogs"
+schemas_endpoint = "/schemas"
 
 
 def health_check(session: requests.Session, uc_url: str) -> bool:
@@ -157,3 +158,56 @@ def update_catalog(
         )
 
     return Catalog.model_validate_json(response.text)
+
+
+def create_schema():
+    raise NotImplementedError
+
+
+def delete_schema():
+    raise NotImplementedError
+
+
+def get_schema():
+    raise NotImplementedError
+
+
+def list_schemas(session: requests.Session, uc_url: str, catalog: str) -> list[Schema]:
+    """
+    Returns a list of schemas in the specified catalog from Unity Catalog.
+    """
+    url = uc_url + api_path + schemas_endpoint
+
+    schemas = []
+    token = None
+
+    # NOTE: listCatalogs pagination is not implemented in Unity Catalog yet
+    # so this handling of pagination is not actually needed atm.
+    while True:
+        response = session.get(
+            url,
+            params={"page_token": token, "catalog_name": catalog},
+        )
+        response_dict = response.json()
+        if not response.ok:
+            if "NOT_FOUND" in response_dict["error_code"].upper():
+                raise DoesNotExistException(response_dict.get("message", ""))
+            raise Exception(
+                f"Something went wrong. Server response:\n{response_dict.get('message', response.text)}"
+            )
+
+        token = response_dict["next_page_token"]
+        schemas.extend(
+            [
+                Schema.model_validate(schema, strict=False)
+                for schema in response_dict["schemas"]
+            ]
+        )
+        if token is None or token == "":
+            break
+
+    return schemas
+
+
+def update_schema():
+    raise NotImplementedError
