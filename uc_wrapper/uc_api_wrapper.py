@@ -2,7 +2,7 @@
 Functions for handling calling Unity Catalog REST API endpoints and parsing results.
 """
 
-from .exceptions import AlreadyExistsException, DoesNotExistException
+from .exceptions import AlreadyExistsError, DoesNotExistError
 from .models import *
 import requests
 import json
@@ -16,12 +16,18 @@ def health_check(session: requests.Session, uc_url: str) -> bool:
     """
     Checks that Unity Catalog is running at the specified address.
     """
-    response = session.get(uc_url)
+    try:
+        response = session.get(uc_url)
 
-    if not response.ok:
+        if not response.ok:
+            return False
+
+        return "Hello, Unity Catalog!" in response.text
+
+    except requests.exceptions.ConnectionError:
         return False
-
-    return "Hello, Unity Catalog!" in response.text
+    except Exception:
+        raise
 
 
 def create_catalog(session: requests.Session, uc_url: str, catalog: Catalog) -> Catalog:
@@ -48,7 +54,7 @@ def create_catalog(session: requests.Session, uc_url: str, catalog: Catalog) -> 
     if not response.ok:
         response_dict = response.json()
         if response_dict.get("error_code", "").upper() == "ALREADY_EXISTS":
-            raise AlreadyExistsException(response_dict.get("message", ""))
+            raise AlreadyExistsError(response_dict.get("message", ""))
         raise Exception(
             f"Something went wrong. Server response:\n{response_dict.get('message', response.text)}"
         )
@@ -107,35 +113,41 @@ def list_catalogs(session: requests.Session, uc_url: str) -> list[Catalog]:
     return catalogs
 
 
-def get_catalog(session: requests.Session, uc_url: str, name: str) -> Catalog | None:
+def get_catalog(session: requests.Session, uc_url: str, name: str) -> Catalog:
     """
     Returns the info of the catalog with the specified name, if it exists.
+    Raises a DoesNotExistException if a catalog with the name does not exist.
     """
     url = uc_url + api_path + catalog_endpoint + "/" + name
     response = session.get(url)
 
     if not response.ok:
-        return None
+        response_dict = response.json()
+        if response_dict.get("error_code", "").upper() == "NOT_FOUND":
+            raise DoesNotExistError(response_dict.get("message", ""))
+        raise Exception(
+            f"Something went wrong. Server response:\n{response_dict.get('message', response.text)}"
+        )
 
-    return Catalog.model_validate(response.json())
+    return Catalog.model_validate_json(response.text)
 
 
 def update_catalog(
     session: requests.Session, uc_url: str, name: str, catalog: Catalog
-) -> Catalog | None:
+) -> Catalog:
     """
     Updates the catalog with the given name with the following fields from `catalog`:
         - name,
         - comment,
         - properties.
     Returns a Catalog with updated information.
-    Raises a DoesNotExistException if a catalog with the name already exists.
+    Raises a DoesNotExistException if a catalog with the name does not exist.
     """
     # BUG? Unity Catalog REST API does not allow updating a catalog without chaning the name:
     # - If the new_name is set and a catalog with the same name already exists, REST API returns ALREADY_EXISTS
     # - If the new_name is omitted, REST API returns INVALID_ARGUMENT
     if name == catalog.name:
-        raise AlreadyExistsException(
+        raise AlreadyExistsError(
             "Unity Catalog does not allow update a catalog without changing the name atm."
         )
 
@@ -152,7 +164,7 @@ def update_catalog(
     if not response.ok:
         response_dict = response.json()
         if response_dict.get("error_code", "").upper() == "NOT_FOUND":
-            raise DoesNotExistException(response_dict.get("message", ""))
+            raise DoesNotExistError(response_dict.get("message", ""))
         raise Exception(
             f"Something went wrong. Server response:\n{response_dict.get('message', response.text)}"
         )
@@ -191,7 +203,7 @@ def list_schemas(session: requests.Session, uc_url: str, catalog: str) -> list[S
         response_dict = response.json()
         if not response.ok:
             if "NOT_FOUND" in response_dict["error_code"].upper():
-                raise DoesNotExistException(response_dict.get("message", ""))
+                raise DoesNotExistError(response_dict.get("message", ""))
             raise Exception(
                 f"Something went wrong. Server response:\n{response_dict.get('message', response.text)}"
             )

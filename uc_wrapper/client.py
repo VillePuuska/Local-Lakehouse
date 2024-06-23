@@ -1,6 +1,18 @@
 import requests
-from .models import *
-from .uc_api_wrapper import *
+from .models import Catalog, Schema
+from .uc_api_wrapper import (
+    create_catalog,
+    create_schema,
+    delete_catalog,
+    delete_schema,
+    get_catalog,
+    get_schema,
+    health_check,
+    list_catalogs,
+    list_schemas,
+    update_catalog,
+    update_schema,
+)
 
 
 class UCClient:
@@ -18,12 +30,7 @@ class UCClient:
         """
         Checks that Unity Catalog is running at the specified address.
         """
-        try:
-            return health_check(self.session, self.uc_url)
-        except requests.exceptions.ConnectionError:
-            return False
-        except Exception:
-            raise
+        return health_check(self.session, self.uc_url)
 
     def create_catalog(self, catalog: Catalog) -> Catalog:
         """
@@ -55,19 +62,21 @@ class UCClient:
         """
         return list_catalogs(self.session, self.uc_url)
 
-    def get_catalog(self, name: str) -> Catalog | None:
+    def get_catalog(self, name: str) -> Catalog:
         """
         Returns the info of the catalog with the specified name, if it exists.
+        Raises a DoesNotExistException if a catalog with the name does not exist.
         """
         return get_catalog(self.session, self.uc_url, name)
 
-    def update_catalog(self, name: str, catalog: Catalog) -> Catalog | None:
+    def update_catalog(self, name: str, catalog: Catalog) -> Catalog:
         """
         Updates the catalog with the given name with the following fields from `catalog`:
             - name,
             - comment,
             - properties.
-        Returns a Catalog with updated information, or None if the catalog did not exist.
+        Returns a Catalog with updated information.
+        Raises a DoesNotExistException if a catalog with the name does not exist.
         """
         return update_catalog(self.session, self.uc_url, name, catalog)
 

@@ -4,11 +4,11 @@ from testcontainers.core.waiting_utils import wait_for_logs  # type: ignore
 import os
 import time
 import pytest
-from uc_wrapper import UCClient, Catalog, AlreadyExistsException, DoesNotExistException
+from uc_wrapper import UCClient, Catalog, AlreadyExistsError, DoesNotExistError
 
 
 # For anyone wandering into here, don't do your intergration tests like this.
-# I'm just too lazy to do this better today.
+# I'm just too lazy to do this better for now.
 def test_full_acceptance_test():
     path = os.path.join(*os.path.split(__file__)[:-1])  # path to the current file
     with DockerImage(path=path, tag="uc-catalog-test-image:latest") as image:
@@ -47,7 +47,8 @@ def test_full_acceptance_test():
             assert cat is not None
             assert cat.name == "unity"
 
-            assert client.get_catalog(cat_name) is None
+            with pytest.raises(DoesNotExistError):
+                client.get_catalog(cat_name)
 
             cat = client.create_catalog(catalog)
             assert cat.name == cat_name
@@ -56,20 +57,20 @@ def test_full_acceptance_test():
 
             assert len(client.list_catalogs()) == 2
 
-            with pytest.raises(AlreadyExistsException):
+            with pytest.raises(AlreadyExistsError):
                 client.create_catalog(catalog)
 
-            with pytest.raises(DoesNotExistException):
+            with pytest.raises(DoesNotExistError):
                 client.update_catalog("xyz_this_cat_does_not_exist", catalog_update)
 
             cat = client.update_catalog(cat_name, catalog_update)
-            assert cat is not None
             assert cat.name == cat_name_update
             assert cat.comment is None
 
             assert len(client.list_catalogs()) == 2
 
-            assert client.get_catalog(cat_name) is None
+            with pytest.raises(DoesNotExistError):
+                client.get_catalog(cat_name)
             assert not client.delete_catalog(cat_name, False)
             assert len(client.list_catalogs()) == 2
 
