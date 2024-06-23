@@ -7,8 +7,13 @@ from .models import *
 import requests
 import json
 
+# error_code the Unity Catalog REST API returns if something was not found
+SERVER_NOT_FOUND_ERROR = "NOT_FOUND"
+# error_code the Unity Catalog REST API returns if something to be created already exists
+SERVER_ALREADY_EXISTS_ERROR = "ALREADY_EXISTS"
+
 api_path = "/api/2.1/unity-catalog"
-catalog_endpoint = "/catalogs"
+catalogs_endpoint = "/catalogs"
 schemas_endpoint = "/schemas"
 
 
@@ -46,14 +51,14 @@ def create_catalog(session: requests.Session, uc_url: str, catalog: Catalog) -> 
         "comment": catalog.comment,
         "properties": catalog.properties,
     }
-    url = uc_url + api_path + catalog_endpoint
+    url = uc_url + api_path + catalogs_endpoint
     response = session.post(
         url, data=json.dumps(data), headers={"Content-Type": "application/json"}
     )
 
     if not response.ok:
         response_dict = response.json()
-        if response_dict.get("error_code", "").upper() == "ALREADY_EXISTS":
+        if response_dict.get("error_code", "").upper() == SERVER_ALREADY_EXISTS_ERROR:
             raise AlreadyExistsError(response_dict.get("message", ""))
         raise Exception(
             f"Something went wrong. Server response:\n{response_dict.get('message', response.text)}"
@@ -77,7 +82,7 @@ def delete_catalog(
 
     TODO: Actually handle error responses from the server. After force-flag has been fixed.
     """
-    url = uc_url + api_path + catalog_endpoint + "/" + name
+    url = uc_url + api_path + catalogs_endpoint + "/" + name
     response = session.delete(url, params={"force": force})
 
     return response.ok
@@ -95,7 +100,7 @@ def list_catalogs(session: requests.Session, uc_url: str) -> list[Catalog]:
     # and next_page_token is always null.
     while True:
         response = session.get(
-            uc_url + api_path + catalog_endpoint,
+            uc_url + api_path + catalogs_endpoint,
             params={"page_token": token},
         ).json()
         token = response["next_page_token"]
@@ -118,12 +123,12 @@ def get_catalog(session: requests.Session, uc_url: str, name: str) -> Catalog:
     Returns the info of the catalog with the specified name, if it exists.
     Raises a DoesNotExistException if a catalog with the name does not exist.
     """
-    url = uc_url + api_path + catalog_endpoint + "/" + name
+    url = uc_url + api_path + catalogs_endpoint + "/" + name
     response = session.get(url)
 
     if not response.ok:
         response_dict = response.json()
-        if response_dict.get("error_code", "").upper() == "NOT_FOUND":
+        if response_dict.get("error_code", "").upper() == SERVER_NOT_FOUND_ERROR:
             raise DoesNotExistError(response_dict.get("message", ""))
         raise Exception(
             f"Something went wrong. Server response:\n{response_dict.get('message', response.text)}"
@@ -143,7 +148,7 @@ def update_catalog(
     Returns a Catalog with updated information.
     Raises a DoesNotExistException if a catalog with the name does not exist.
     """
-    # BUG? Unity Catalog REST API does not allow updating a catalog without chaning the name:
+    # BUG? Unity Catalog REST API does not allow updating a catalog without changing the name:
     # - If the new_name is set and a catalog with the same name already exists, REST API returns ALREADY_EXISTS
     # - If the new_name is omitted, REST API returns INVALID_ARGUMENT
     if name == catalog.name:
@@ -156,14 +161,14 @@ def update_catalog(
         "comment": catalog.comment,
         "properties": catalog.properties,
     }
-    url = uc_url + api_path + catalog_endpoint + "/" + name
+    url = uc_url + api_path + catalogs_endpoint + "/" + name
     response = session.patch(
         url, data=json.dumps(data), headers={"Content-Type": "application/json"}
     )
 
     if not response.ok:
         response_dict = response.json()
-        if response_dict.get("error_code", "").upper() == "NOT_FOUND":
+        if response_dict.get("error_code", "").upper() == SERVER_NOT_FOUND_ERROR:
             raise DoesNotExistError(response_dict.get("message", ""))
         raise Exception(
             f"Something went wrong. Server response:\n{response_dict.get('message', response.text)}"
@@ -180,8 +185,25 @@ def delete_schema():
     raise NotImplementedError
 
 
-def get_schema():
-    raise NotImplementedError
+def get_schema(
+    session: requests.Session, uc_url: str, catalog: str, schema: str
+) -> Schema:
+    """
+    Returns the info of the schema in the catalog, if it exists.
+    Raises a DoesNotExistException if the schema or catalog does not exist.
+    """
+    url = uc_url + api_path + schemas_endpoint + "/" + catalog + "." + schema
+    response = session.get(url)
+
+    if not response.ok:
+        response_dict = response.json()
+        if response_dict["error_code"].upper() == SERVER_NOT_FOUND_ERROR:
+            raise DoesNotExistError(response_dict.get("message", ""))
+        raise Exception(
+            f"Something went wrong. Server response:\n{response_dict.get('message', response.text)}"
+        )
+
+    return Schema.model_validate_json(response.text)
 
 
 def list_schemas(session: requests.Session, uc_url: str, catalog: str) -> list[Schema]:
@@ -202,7 +224,7 @@ def list_schemas(session: requests.Session, uc_url: str, catalog: str) -> list[S
         )
         response_dict = response.json()
         if not response.ok:
-            if "NOT_FOUND" in response_dict["error_code"].upper():
+            if SERVER_NOT_FOUND_ERROR in response_dict["error_code"].upper():
                 raise DoesNotExistError(response_dict.get("message", ""))
             raise Exception(
                 f"Something went wrong. Server response:\n{response_dict.get('message', response.text)}"

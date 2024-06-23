@@ -90,3 +90,19 @@ def test_full_acceptance_test():
             assert schemas[0].name == default_schema
             assert schemas[0].catalog_name == default_catalog
             assert schemas[0].full_name == default_catalog + "." + default_schema
+
+            schema = client.get_schema(catalog=default_catalog, schema=default_schema)
+            assert schema.name == default_schema
+            assert schema.catalog_name == default_catalog
+            assert schema.created_at is not None
+            assert schema.updated_at is None
+
+            with pytest.raises(DoesNotExistError):
+                client.get_schema(
+                    catalog=default_catalog, schema=default_schema + "sadfasgsagasg"
+                )
+
+            with pytest.raises(DoesNotExistError):
+                client.get_schema(
+                    catalog=default_catalog + "sfdgsagsd", schema=default_schema
+                )

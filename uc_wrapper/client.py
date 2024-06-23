@@ -86,8 +86,12 @@ class UCClient:
     def delete_schema(self):
         raise NotImplementedError
 
-    def get_schema(self):
-        raise NotImplementedError
+    def get_schema(self, catalog: str, schema: str) -> Schema:
+        """
+        Returns the info of the schema in the catalog, if it exists.
+        Raises a DoesNotExistException if the schema or catalog does not exist.
+        """
+        return get_schema(self.session, self.uc_url, catalog, schema)
 
     def list_schemas(self, catalog: str) -> list[Schema]:
         """
