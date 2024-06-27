@@ -19,6 +19,36 @@ catalogs_endpoint = "/catalogs"
 schemas_endpoint = "/schemas"
 
 
+def _check_already_exists_response(response: requests.Response):
+    """
+    Helper function to check if Unity Catalog responded with an ALREADY_EXISTS error.
+    Raises an AlreadyExistsError if yes.
+    Raises an Exception if the response was not okay.
+    """
+    if not response.ok:
+        response_dict = response.json()
+        if response_dict.get("error_code", "").upper() == SERVER_ALREADY_EXISTS_ERROR:
+            raise AlreadyExistsError(response_dict.get("message", ""))
+        raise Exception(
+            f"Something went wrong. Server response:\n{response_dict.get('message', response.text)}"
+        )
+
+
+def _check_does_not_exist_response(response: requests.Response):
+    """
+    Helper function to check if Unity Catalog responded with a NOT_FOUND error.
+    Raises a DoesNotExistError if yes.
+    Raises an Exception if the response was not okay.
+    """
+    if not response.ok:
+        response_dict = response.json()
+        if response_dict.get("error_code", "").upper() == SERVER_NOT_FOUND_ERROR:
+            raise DoesNotExistError(response_dict.get("message", ""))
+        raise Exception(
+            f"Something went wrong. Server response:\n{response_dict.get('message', response.text)}"
+        )
+
+
 def health_check(session: requests.Session, uc_url: str) -> bool:
     """
     Checks that Unity Catalog is running at the specified address.
@@ -56,13 +86,7 @@ def create_catalog(session: requests.Session, uc_url: str, catalog: Catalog) -> 
     url = uc_url + api_path + catalogs_endpoint
     response = session.post(url, data=json.dumps(data), headers=JSON_HEADER)
 
-    if not response.ok:
-        response_dict = response.json()
-        if response_dict.get("error_code", "").upper() == SERVER_ALREADY_EXISTS_ERROR:
-            raise AlreadyExistsError(response_dict.get("message", ""))
-        raise Exception(
-            f"Something went wrong. Server response:\n{response_dict.get('message', response.text)}"
-        )
+    _check_already_exists_response(response=response)
 
     return Catalog.model_validate_json(response.text)
 
@@ -126,13 +150,7 @@ def get_catalog(session: requests.Session, uc_url: str, name: str) -> Catalog:
     url = uc_url + api_path + catalogs_endpoint + "/" + name
     response = session.get(url)
 
-    if not response.ok:
-        response_dict = response.json()
-        if response_dict.get("error_code", "").upper() == SERVER_NOT_FOUND_ERROR:
-            raise DoesNotExistError(response_dict.get("message", ""))
-        raise Exception(
-            f"Something went wrong. Server response:\n{response_dict.get('message', response.text)}"
-        )
+    _check_does_not_exist_response(response=response)
 
     return Catalog.model_validate_json(response.text)
 
@@ -162,17 +180,9 @@ def update_catalog(
         "properties": catalog.properties,
     }
     url = uc_url + api_path + catalogs_endpoint + "/" + name
-    response = session.patch(
-        url, data=json.dumps(data), headers={"Content-Type": "application/json"}
-    )
+    response = session.patch(url, data=json.dumps(data), headers=JSON_HEADER)
 
-    if not response.ok:
-        response_dict = response.json()
-        if response_dict.get("error_code", "").upper() == SERVER_NOT_FOUND_ERROR:
-            raise DoesNotExistError(response_dict.get("message", ""))
-        raise Exception(
-            f"Something went wrong. Server response:\n{response_dict.get('message', response.text)}"
-        )
+    _check_does_not_exist_response(response=response)
 
     return Catalog.model_validate_json(response.text)
 
@@ -196,13 +206,7 @@ def create_schema(session: requests.Session, uc_url: str, schema: Schema) -> Sch
     }
     response = session.post(url, data=json.dumps(data), headers=JSON_HEADER)
 
-    if not response.ok:
-        response_dict = response.json()
-        if response_dict.get("error_code", "").upper() == SERVER_ALREADY_EXISTS_ERROR:
-            raise AlreadyExistsError(response_dict.get("message", ""))
-        raise Exception(
-            f"Something went wrong. Server response:\n{response_dict.get('message', response.text)}"
-        )
+    _check_already_exists_response(response=response)
 
     return Schema.model_validate_json(response.text)
 
@@ -215,13 +219,7 @@ def delete_schema(session: requests.Session, uc_url: str, catalog: str, schema: 
     url = uc_url + api_path + schemas_endpoint + "/" + catalog + "." + schema
     response = session.delete(url)
 
-    if not response.ok:
-        response_dict = response.json()
-        if response_dict.get("error_code", "").upper() == SERVER_NOT_FOUND_ERROR:
-            raise DoesNotExistError(response_dict.get("message", ""))
-        raise Exception(
-            f"Something went wrong. Server response:\n{response_dict.get('message', response.text)}"
-        )
+    _check_does_not_exist_response(response=response)
 
 
 def get_schema(
@@ -234,13 +232,7 @@ def get_schema(
     url = uc_url + api_path + schemas_endpoint + "/" + catalog + "." + schema
     response = session.get(url)
 
-    if not response.ok:
-        response_dict = response.json()
-        if response_dict["error_code"].upper() == SERVER_NOT_FOUND_ERROR:
-            raise DoesNotExistError(response_dict.get("message", ""))
-        raise Exception(
-            f"Something went wrong. Server response:\n{response_dict.get('message', response.text)}"
-        )
+    _check_does_not_exist_response(response=response)
 
     return Schema.model_validate_json(response.text)
 
@@ -261,14 +253,10 @@ def list_schemas(session: requests.Session, uc_url: str, catalog: str) -> list[S
             url,
             params={"page_token": token, "catalog_name": catalog},
         )
-        response_dict = response.json()
-        if not response.ok:
-            if SERVER_NOT_FOUND_ERROR in response_dict["error_code"].upper():
-                raise DoesNotExistError(response_dict.get("message", ""))
-            raise Exception(
-                f"Something went wrong. Server response:\n{response_dict.get('message', response.text)}"
-            )
 
+        _check_does_not_exist_response(response=response)
+
+        response_dict = response.json()
         token = response_dict["next_page_token"]
         schemas.extend(
             [
