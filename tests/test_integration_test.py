@@ -4,7 +4,7 @@ from testcontainers.core.waiting_utils import wait_for_logs  # type: ignore
 import os
 import time
 import pytest
-from uc_wrapper import UCClient, Catalog, AlreadyExistsError, DoesNotExistError
+from uc_wrapper import UCClient, Catalog, AlreadyExistsError, DoesNotExistError, Schema
 
 
 # For anyone wandering into here, don't do your intergration tests like this.
@@ -85,6 +85,31 @@ def test_full_acceptance_test():
             default_catalog = "unity"
             default_schema = "default"
 
+            new_schema_name = "asdasdasdasfdsadgsa"
+            new_schema_comment = "asd"
+            new_schema = Schema(
+                name=new_schema_name,
+                catalog_name=default_catalog,
+                comment=new_schema_comment,
+            )
+
+            schema_name_update = "asdgnölsavnsaödn"
+            schema_update = Schema(
+                name=schema_name_update,
+                catalog_name=default_catalog,
+            )
+
+            try:
+                client.delete_schema(default_catalog, new_schema_name)
+            except:
+                pass
+            try:
+                client.delete_schema(default_catalog, schema_name_update)
+            except:
+                pass
+
+            assert client.health_check()
+
             schemas = client.list_schemas(catalog=default_catalog)
             assert len(schemas) == 1
             assert schemas[0].name == default_schema
@@ -106,3 +131,27 @@ def test_full_acceptance_test():
                 client.get_schema(
                     catalog=default_catalog + "sfdgsagsd", schema=default_schema
                 )
+
+            with pytest.raises(DoesNotExistError):
+                client.delete_schema(catalog=default_catalog, schema=new_schema_name)
+
+            schema = client.create_schema(schema=new_schema)
+            assert schema.full_name == default_catalog + "." + new_schema_name
+            assert schema.comment == new_schema_comment
+            assert schema.created_at is not None
+            assert schema.updated_at is None
+            assert schema.schema_id is not None
+
+            with pytest.raises(AlreadyExistsError):
+                client.create_schema(schema=new_schema)
+
+            schemas = client.list_schemas(catalog=default_catalog)
+            assert len(schemas) == 2
+
+            client.delete_schema(catalog=default_catalog, schema=new_schema_name)
+
+            schemas = client.list_schemas(catalog=default_catalog)
+            assert len(schemas) == 1
+
+            with pytest.raises(DoesNotExistError):
+                client.delete_schema(catalog=default_catalog, schema=new_schema_name)

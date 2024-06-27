@@ -80,11 +80,24 @@ class UCClient:
         """
         return update_catalog(self.session, self.uc_url, name, catalog)
 
-    def create_schema(self):
-        raise NotImplementedError
+    def create_schema(self, schema: Schema) -> Schema:
+        """
+        Creates a new schema with the following fields specified in the parameter `schema`:
+            - name,
+            - catalog_name,
+            - comment,
+            - properties.
+        Returns a new Schema with the remaining fields populated.
+        Raises an AlreadyExistsException if a schema with the name already exists in the same catalog.
+        """
+        return create_schema(self.session, self.uc_url, schema)
 
-    def delete_schema(self):
-        raise NotImplementedError
+    def delete_schema(self, catalog: str, schema: str):
+        """
+        Deletes the schema in the catalog.
+        Raises a DoesNotExistError if the schema did not exist.
+        """
+        delete_schema(self.session, self.uc_url, catalog, schema)
 
     def get_schema(self, catalog: str, schema: str) -> Schema:
         """

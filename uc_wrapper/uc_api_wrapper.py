@@ -12,6 +12,8 @@ SERVER_NOT_FOUND_ERROR = "NOT_FOUND"
 # error_code the Unity Catalog REST API returns if something to be created already exists
 SERVER_ALREADY_EXISTS_ERROR = "ALREADY_EXISTS"
 
+JSON_HEADER = {"Content-Type": "application/json"}
+
 api_path = "/api/2.1/unity-catalog"
 catalogs_endpoint = "/catalogs"
 schemas_endpoint = "/schemas"
@@ -52,9 +54,7 @@ def create_catalog(session: requests.Session, uc_url: str, catalog: Catalog) -> 
         "properties": catalog.properties,
     }
     url = uc_url + api_path + catalogs_endpoint
-    response = session.post(
-        url, data=json.dumps(data), headers={"Content-Type": "application/json"}
-    )
+    response = session.post(url, data=json.dumps(data), headers=JSON_HEADER)
 
     if not response.ok:
         response_dict = response.json()
@@ -177,12 +177,51 @@ def update_catalog(
     return Catalog.model_validate_json(response.text)
 
 
-def create_schema():
-    raise NotImplementedError
+def create_schema(session: requests.Session, uc_url: str, schema: Schema) -> Schema:
+    """
+    Creates a new schema with the following fields specified in the parameter `schema`:
+        - name,
+        - catalog_name,
+        - comment,
+        - properties.
+    Returns a new Schema with the remaining fields populated.
+    Raises an AlreadyExistsException if a schema with the name already exists in the same catalog.
+    """
+    url = uc_url + api_path + schemas_endpoint
+    data = {
+        "name": schema.name,
+        "catalog_name": schema.catalog_name,
+        "comment": schema.comment,
+        "properties": schema.properties,
+    }
+    response = session.post(url, data=json.dumps(data), headers=JSON_HEADER)
+
+    if not response.ok:
+        response_dict = response.json()
+        if response_dict.get("error_code", "").upper() == SERVER_ALREADY_EXISTS_ERROR:
+            raise AlreadyExistsError(response_dict.get("message", ""))
+        raise Exception(
+            f"Something went wrong. Server response:\n{response_dict.get('message', response.text)}"
+        )
+
+    return Schema.model_validate_json(response.text)
 
 
-def delete_schema():
-    raise NotImplementedError
+def delete_schema(session: requests.Session, uc_url: str, catalog: str, schema: str):
+    """
+    Deletes the schema in the catalog.
+    Raises a DoesNotExistError if the schema did not exist.
+    """
+    url = uc_url + api_path + schemas_endpoint + "/" + catalog + "." + schema
+    response = session.delete(url)
+
+    if not response.ok:
+        response_dict = response.json()
+        if response_dict.get("error_code", "").upper() == SERVER_NOT_FOUND_ERROR:
+            raise DoesNotExistError(response_dict.get("message", ""))
+        raise Exception(
+            f"Something went wrong. Server response:\n{response_dict.get('message', response.text)}"
+        )
 
 
 def get_schema(
