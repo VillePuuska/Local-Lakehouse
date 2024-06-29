@@ -23,7 +23,7 @@ class Schema(BaseModel):
 
     name: str
     catalog_name: str
-    comment: str | None = None
+    comment: str | None = ""  # UC doesn't update a null comment properly so default ""
     properties: dict[str, str] = {}
     full_name: str | None = None
     created_at: datetime.datetime | None = None

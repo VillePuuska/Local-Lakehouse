@@ -23,27 +23,32 @@ def _check_already_exists_response(response: requests.Response):
     """
     Helper function to check if Unity Catalog responded with an ALREADY_EXISTS error.
     Raises an AlreadyExistsError if yes.
-    Raises an Exception if the response was not okay.
     """
     if not response.ok:
         response_dict = response.json()
         if response_dict.get("error_code", "").upper() == SERVER_ALREADY_EXISTS_ERROR:
             raise AlreadyExistsError(response_dict.get("message", ""))
-        raise Exception(
-            f"Something went wrong. Server response:\n{response_dict.get('message', response.text)}"
-        )
 
 
 def _check_does_not_exist_response(response: requests.Response):
     """
     Helper function to check if Unity Catalog responded with a NOT_FOUND error.
     Raises a DoesNotExistError if yes.
-    Raises an Exception if the response was not okay.
     """
     if not response.ok:
         response_dict = response.json()
         if response_dict.get("error_code", "").upper() == SERVER_NOT_FOUND_ERROR:
             raise DoesNotExistError(response_dict.get("message", ""))
+
+
+def _check_response_failed(response: requests.Response):
+    """
+    Helper function to raise an Exception with the error message if Unity Catalog responded
+    with any error.
+    Raises an Exception.
+    """
+    if not response.ok:
+        response_dict = response.json()
         raise Exception(
             f"Something went wrong. Server response:\n{response_dict.get('message', response.text)}"
         )
@@ -76,7 +81,7 @@ def create_catalog(session: requests.Session, uc_url: str, catalog: Catalog) -> 
     Returns a new Catalog with the following fields added:
         - created_at,
         - id.
-    Raises an AlreadyExistsException if a catalog with the name already exists.
+    Raises an AlreadyExistsError if a catalog with the name already exists.
     """
     data = {
         "name": catalog.name,
@@ -87,6 +92,7 @@ def create_catalog(session: requests.Session, uc_url: str, catalog: Catalog) -> 
     response = session.post(url, data=json.dumps(data), headers=JSON_HEADER)
 
     _check_already_exists_response(response=response)
+    _check_response_failed(response=response)
 
     return Catalog.model_validate_json(response.text)
 
@@ -145,12 +151,13 @@ def list_catalogs(session: requests.Session, uc_url: str) -> list[Catalog]:
 def get_catalog(session: requests.Session, uc_url: str, name: str) -> Catalog:
     """
     Returns the info of the catalog with the specified name, if it exists.
-    Raises a DoesNotExistException if a catalog with the name does not exist.
+    Raises a DoesNotExistError if a catalog with the name does not exist.
     """
     url = uc_url + api_path + catalogs_endpoint + "/" + name
     response = session.get(url)
 
     _check_does_not_exist_response(response=response)
+    _check_response_failed(response=response)
 
     return Catalog.model_validate_json(response.text)
 
@@ -164,7 +171,9 @@ def update_catalog(
         - comment,
         - properties.
     Returns a Catalog with updated information.
-    Raises a DoesNotExistException if a catalog with the name does not exist.
+    Raises a DoesNotExistError if a catalog with the name does not exist.
+    Raises an AlreadyExistsError if the new name is the same as the old name. Unity Catalog
+    does not allow updating and keeping the same name atm.
     """
     # BUG? Unity Catalog REST API does not allow updating a catalog without changing the name:
     # - If the new_name is set and a catalog with the same name already exists, REST API returns ALREADY_EXISTS
@@ -183,6 +192,7 @@ def update_catalog(
     response = session.patch(url, data=json.dumps(data), headers=JSON_HEADER)
 
     _check_does_not_exist_response(response=response)
+    _check_response_failed(response=response)
 
     return Catalog.model_validate_json(response.text)
 
@@ -195,7 +205,7 @@ def create_schema(session: requests.Session, uc_url: str, schema: Schema) -> Sch
         - comment,
         - properties.
     Returns a new Schema with the remaining fields populated.
-    Raises an AlreadyExistsException if a schema with the name already exists in the same catalog.
+    Raises an AlreadyExistsError if a schema with the name already exists in the same catalog.
     """
     url = uc_url + api_path + schemas_endpoint
     data = {
@@ -207,6 +217,7 @@ def create_schema(session: requests.Session, uc_url: str, schema: Schema) -> Sch
     response = session.post(url, data=json.dumps(data), headers=JSON_HEADER)
 
     _check_already_exists_response(response=response)
+    _check_response_failed(response=response)
 
     return Schema.model_validate_json(response.text)
 
@@ -220,6 +231,7 @@ def delete_schema(session: requests.Session, uc_url: str, catalog: str, schema: 
     response = session.delete(url)
 
     _check_does_not_exist_response(response=response)
+    _check_response_failed(response=response)
 
 
 def get_schema(
@@ -233,6 +245,7 @@ def get_schema(
     response = session.get(url)
 
     _check_does_not_exist_response(response=response)
+    _check_response_failed(response=response)
 
     return Schema.model_validate_json(response.text)
 
@@ -255,6 +268,7 @@ def list_schemas(session: requests.Session, uc_url: str, catalog: str) -> list[S
         )
 
         _check_does_not_exist_response(response=response)
+        _check_response_failed(response=response)
 
         response_dict = response.json()
         token = response_dict["next_page_token"]
@@ -270,5 +284,34 @@ def list_schemas(session: requests.Session, uc_url: str, catalog: str) -> list[S
     return schemas
 
 
-def update_schema():
-    raise NotImplementedError
+def update_schema(
+    session: requests.Session,
+    uc_url: str,
+    catalog: str,
+    schema_name: str,
+    new_schema: Schema,
+) -> Schema:
+    """
+    Updates the schema with the given name in the given catalog with the following
+    fields from `new_schema`:
+        - name,
+        - comment,
+        - properties.
+    Returns a Schema with updated information.
+    Raises a DoesNotExistError if the schema does not exist.
+    Raises an AlreadyExistsError if the new name is the same as the old name. Unity Catalog
+    does not allow updating and keeping the same name atm.
+    """
+    url = uc_url + api_path + schemas_endpoint + "/" + catalog + "." + schema_name
+    data = {
+        "comment": new_schema.comment,
+        "properties": new_schema.properties,
+        "new_name": new_schema.name,
+    }
+    response = session.patch(url=url, data=json.dumps(data), headers=JSON_HEADER)
+
+    _check_does_not_exist_response(response=response)
+    _check_already_exists_response(response=response)
+    _check_response_failed(response=response)
+
+    return Schema.model_validate_json(response.text)

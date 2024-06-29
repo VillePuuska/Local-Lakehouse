@@ -148,7 +148,43 @@ def test_full_acceptance_test():
             schemas = client.list_schemas(catalog=default_catalog)
             assert len(schemas) == 2
 
-            client.delete_schema(catalog=default_catalog, schema=new_schema_name)
+            with pytest.raises(AlreadyExistsError):
+                client.update_schema(
+                    catalog=default_catalog,
+                    schema_name=new_schema_name,
+                    new_schema=new_schema,
+                )
+
+            with pytest.raises(DoesNotExistError):
+                client.update_schema(
+                    catalog=default_catalog,
+                    schema_name=schema_name_update,
+                    new_schema=schema_update,
+                )
+
+            schema = client.update_schema(
+                catalog=default_catalog,
+                schema_name=new_schema_name,
+                new_schema=schema_update,
+            )
+            assert schema.full_name == default_catalog + "." + schema_name_update
+            # Default comment set to "" since UC does not clear comment is new comment is null
+            assert schema.comment == ""
+            assert schema.updated_at is not None
+
+            with pytest.raises(DoesNotExistError):
+                client.get_schema(catalog=default_catalog, schema=new_schema_name)
+
+            schemas = client.list_schemas(catalog=default_catalog)
+            assert len(schemas) == 2
+
+            with pytest.raises(DoesNotExistError):
+                client.delete_schema(catalog=default_catalog, schema=new_schema_name)
+
+            schemas = client.list_schemas(catalog=default_catalog)
+            assert len(schemas) == 2
+
+            client.delete_schema(catalog=default_catalog, schema=schema_name_update)
 
             schemas = client.list_schemas(catalog=default_catalog)
             assert len(schemas) == 1
