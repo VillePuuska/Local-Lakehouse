@@ -18,7 +18,9 @@ def client() -> Generator[UCClient, None, None]:
                 "###################################################################",
                 120.0,
             )
-            time.sleep(5.0)  # extra sleep to let Unity Catalog to start listening
+            # Unity Catalog does not log anything after it has started listening to its port
+            # so we need an extra sleep
+            time.sleep(5.0)
 
             url = container.get_container_host_ip()
             port = container.get_exposed_port(8080)
@@ -26,16 +28,9 @@ def client() -> Generator[UCClient, None, None]:
             yield UCClient(uc_url=uc_url)
 
 
-def test_health_check(client: UCClient):
+def test_catalogs_endpoint_intergration(client: UCClient):
     assert client.health_check()
 
-
-def test_full_acceptance_test(client: UCClient):
-    assert client.health_check()
-
-    #
-    # catalogs endpoint tests
-    #
     cat_name = "asdasdasdasfdsadgsa"
     cat_comment = "asd"
     catalog = Catalog(
@@ -46,6 +41,8 @@ def test_full_acceptance_test(client: UCClient):
     cat_name_update = "asdgnölsavnsaödn"
     catalog_update = Catalog(name=cat_name_update)
 
+    # At start, there is only the default catalog; verify this
+
     assert len(client.list_catalogs()) == 1
 
     cat = client.get_catalog("unity")
@@ -54,6 +51,8 @@ def test_full_acceptance_test(client: UCClient):
 
     with pytest.raises(DoesNotExistError):
         client.get_catalog(cat_name)
+
+    # Then we create a new catalog; verify it was added and that we cannot overwrite it
 
     cat = client.create_catalog(catalog)
     assert cat.name == cat_name
@@ -68,6 +67,8 @@ def test_full_acceptance_test(client: UCClient):
     with pytest.raises(DoesNotExistError):
         client.update_catalog("xyz_this_cat_does_not_exist", catalog_update)
 
+    # Update the catalog we added; verify it was updated and the old catalog does not exist
+
     cat = client.update_catalog(cat_name, catalog_update)
     assert cat.name == cat_name_update
     assert cat.comment is None
@@ -79,14 +80,17 @@ def test_full_acceptance_test(client: UCClient):
     assert not client.delete_catalog(cat_name, False)
     assert len(client.list_catalogs()) == 2
 
+    # Finally we delete the updated catalog; verify it actually gets deleted and we cannot "re-delete" it
+
     assert client.delete_catalog(cat_name_update, False)
     assert len(client.list_catalogs()) == 1
     assert not client.delete_catalog(cat_name_update, False)
     assert len(client.list_catalogs()) == 1
 
-    #
-    # schemas endpoint tests
-    #
+
+def test_schemas_endpoint_intergration(client: UCClient):
+    assert client.health_check()
+
     default_catalog = "unity"
     default_schema = "default"
 
@@ -104,16 +108,7 @@ def test_full_acceptance_test(client: UCClient):
         catalog_name=default_catalog,
     )
 
-    try:
-        client.delete_schema(default_catalog, new_schema_name)
-    except:
-        pass
-    try:
-        client.delete_schema(default_catalog, schema_name_update)
-    except:
-        pass
-
-    assert client.health_check()
+    # Initially, there is only the default schema; verify this
 
     schemas = client.list_schemas(catalog=default_catalog)
     assert len(schemas) == 1
@@ -137,6 +132,8 @@ def test_full_acceptance_test(client: UCClient):
 
     with pytest.raises(DoesNotExistError):
         client.delete_schema(catalog=default_catalog, schema=new_schema_name)
+
+    # Then we create a new schema; verify it was added and we cannot overwrite it
 
     schema = client.create_schema(schema=new_schema)
     assert schema.full_name == default_catalog + "." + new_schema_name
@@ -165,13 +162,15 @@ def test_full_acceptance_test(client: UCClient):
             new_schema=schema_update,
         )
 
+    # Update the schema; verify the schema was updated and the old schema does not exist
+
     schema = client.update_schema(
         catalog=default_catalog,
         schema_name=new_schema_name,
         new_schema=schema_update,
     )
     assert schema.full_name == default_catalog + "." + schema_name_update
-    # Default comment set to "" since UC does not clear comment is new comment is null
+    # Default comment set to "" since UC does not clear comment if the new comment is null
     assert schema.comment == ""
     assert schema.updated_at is not None
 
@@ -186,6 +185,8 @@ def test_full_acceptance_test(client: UCClient):
 
     schemas = client.list_schemas(catalog=default_catalog)
     assert len(schemas) == 2
+
+    # Finally we delete the updated schema; verify it got deleted and we cannot "re-delete" it
 
     client.delete_schema(catalog=default_catalog, schema=schema_name_update)
 
