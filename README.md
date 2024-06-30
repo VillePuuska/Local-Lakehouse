@@ -28,7 +28,19 @@ Toying with the idea of using Unity Catalog to manage my local structured data a
 ---
 
 ## Tests
-- To run integration tests you need
+- To be able to run integration tests you need
     - a Python environment with the dev dependencies installed (`poetry install --with dev`),
     - Docker.
+- The integration tests use testcontainers for spinning up a Unity Catalog server. You have two options for building the needed image:
+    - Don't do anything yourself and let the test build the image everytime it runs. Suitable for CI, but annoyingly slow when trying to run tests while developing.
+    - Build the image yourself and have the tests use the image you built. To do this:
+        - Dockerfile is in the `tests` directory.
+        - Set the environment variable `UC_TEST_USE_IMAGE` to `TRUE`; the tests check this to see if a pre-existing image should be used.
+        - Set the environment variable `UC_TEST_IMAGE_TAG` to be the tag of the image you built.
+        - For example:
+        ```
+        docker build -t uc-test:0.1 tests/
+        export UC_TEST_USE_IMAGE=TRUE
+        export UC_TEST_IMAGE_TAG=uc-test:0.1
+        ```
 - Call `pytest` (or `python -m pytest`) from the root of the repo or from the `tests` directory.
