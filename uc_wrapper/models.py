@@ -83,6 +83,10 @@ class DataType(Enum):
 
 
 class Column(BaseModel):
+    """
+    Model for a Column in Unity Catalog.
+    """
+
     name: str
     type_text: str | None = None
     type_json: str | None = None

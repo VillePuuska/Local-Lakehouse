@@ -1,15 +1,19 @@
 import requests
-from .models import Catalog, Schema
+from .models import Catalog, Schema, Table
 from .uc_api_wrapper import (
     create_catalog,
     create_schema,
+    create_table,
     delete_catalog,
     delete_schema,
+    delete_table,
     get_catalog,
     get_schema,
+    get_table,
     health_check,
     list_catalogs,
     list_schemas,
+    list_tables,
     update_catalog,
     update_schema,
 )
@@ -142,4 +146,65 @@ class UCClient:
             catalog=catalog,
             schema_name=schema_name,
             new_schema=new_schema,
+        )
+
+    def create_table(self, table: Table) -> Table:
+        """
+        Creates a new table with the following fields specified in the parameter `table`:
+            - name,
+            - catalog_name,
+            - schema_name,
+            - table_type,
+            - file_type,
+            - columns,
+            - storage_location (for EXTERNAL tables),
+            - comment,
+            - properties.
+        Returns a new Table with the remaining fields populated.
+        Raises an AlreadyExistsError if a Table with the name already exists in the same catalog.
+        """
+        return create_table(session=self.session, uc_url=self.uc_url, table=table)
+
+    def delete_table(
+        self,
+        catalog: str,
+        schema: str,
+        table: str,
+    ):
+        """
+        Deletes the table.
+        Raises a DoesNotExistError if the table did not exist.
+        """
+        return delete_table(
+            session=self.session,
+            uc_url=self.uc_url,
+            catalog=catalog,
+            schema=schema,
+            table=table,
+        )
+
+    def get_table(
+        self,
+        catalog: str,
+        schema: str,
+        table: str,
+    ) -> Table:
+        """
+        Returns the info of the table, if it exists.
+        Raises a DoesNotExistException if the table does not exist.
+        """
+        return get_table(
+            session=self.session,
+            uc_url=self.uc_url,
+            catalog=catalog,
+            schema=schema,
+            table=table,
+        )
+
+    def list_tables(self, catalog: str, schema: str) -> list[Table]:
+        """
+        Returns a list of tables in the specified catalog.schema from Unity Catalog.
+        """
+        return list_tables(
+            session=self.session, uc_url=self.uc_url, catalog=catalog, schema=schema
         )

@@ -315,3 +315,50 @@ def update_schema(
     _check_response_failed(response=response)
 
     return Schema.model_validate_json(response.text)
+
+
+def create_table(session: requests.Session, uc_url: str, table: Table) -> Table:
+    """
+    Creates a new table with the following fields specified in the parameter `table`:
+        - name,
+        - catalog_name,
+        - schema_name,
+        - table_type,
+        - file_type,
+        - columns,
+        - storage_location (for EXTERNAL tables),
+        - comment,
+        - properties.
+    Returns a new Table with the remaining fields populated.
+    Raises an AlreadyExistsError if a Table with the name already exists in the same catalog.
+    """
+    raise NotImplementedError
+
+
+def delete_table(
+    session: requests.Session, uc_url: str, catalog: str, schema: str, table: str
+):
+    """
+    Deletes the table.
+    Raises a DoesNotExistError if the table did not exist.
+    """
+    raise NotImplementedError
+
+
+def get_table(
+    session: requests.Session, uc_url: str, catalog: str, schema: str, table: str
+) -> Table:
+    """
+    Returns the info of the table, if it exists.
+    Raises a DoesNotExistException if the table does not exist.
+    """
+    raise NotImplementedError
+
+
+def list_tables(
+    session: requests.Session, uc_url: str, catalog: str, schema: str
+) -> list[Table]:
+    """
+    Returns a list of tables in the specified catalog.schema from Unity Catalog.
+    """
+    raise NotImplementedError
