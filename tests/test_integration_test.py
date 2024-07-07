@@ -6,7 +6,18 @@ import time
 import requests
 import pytest
 from collections.abc import Generator
-from uc_wrapper import UCClient, Catalog, AlreadyExistsError, DoesNotExistError, Schema
+from uc_wrapper import (
+    UCClient,
+    Catalog,
+    Column,
+    AlreadyExistsError,
+    DoesNotExistError,
+    Schema,
+    Table,
+    TableType,
+    FileType,
+    DataType,
+)
 
 
 USE_EXISTING_IMAGE_ENV_VAR = "UC_TEST_USE_IMAGE"
@@ -225,3 +236,98 @@ def test_schemas_endpoint_intergration(client: UCClient):
 
     with pytest.raises(DoesNotExistError):
         client.delete_schema(catalog=default_catalog, schema=new_schema_name)
+
+
+def test_tables_endpoint_integration(client: UCClient):
+    assert client.health_check()
+
+    default_catalog = "unity"
+    default_schema = "default"
+
+    default_external_table = Table(
+        name="numbers",
+        catalog_name=default_catalog,
+        schema_name=default_schema,
+        table_type=TableType.EXTERNAL,
+        file_type=FileType.DELTA,
+        columns=[
+            Column(
+                name="as_int",
+                data_type=DataType.INT,
+                position=0,
+                nullable=False,
+            ),
+            Column(
+                name="as_double",
+                data_type=DataType.DOUBLE,
+                position=1,
+                nullable=False,
+            ),
+        ],
+    )
+
+    default_managed_table = Table(
+        name="marksheet",
+        catalog_name=default_catalog,
+        schema_name=default_schema,
+        table_type=TableType.MANAGED,
+        file_type=FileType.DELTA,
+        columns=[
+            Column(
+                name="id",
+                data_type=DataType.INT,
+                position=0,
+                nullable=False,
+            ),
+            Column(
+                name="name",
+                data_type=DataType.STRING,
+                position=1,
+                nullable=False,
+            ),
+            Column(
+                name="marks",
+                data_type=DataType.INT,
+                position=2,
+                nullable=True,
+            ),
+        ],
+    )
+
+    for default_table in [default_external_table, default_managed_table]:
+        table = client.get_table(
+            catalog=default_catalog,
+            schema=default_schema,
+            table=default_table.name,
+        )
+        assert table.name == default_table.name
+        assert table.catalog_name == default_table.catalog_name
+        assert table.schema_name == default_table.schema_name
+        assert table.table_type == default_table.table_type
+        assert table.file_type == default_table.file_type
+
+        assert len(table.columns) == len(default_table.columns)
+        for i in range(len(table.columns)):
+            assert table.columns[i].name == default_table.columns[i].name
+            assert table.columns[i].data_type == default_table.columns[i].data_type
+            assert table.columns[i].position == default_table.columns[i].position
+            assert table.columns[i].nullable == default_table.columns[i].nullable
+
+    with pytest.raises(DoesNotExistError):
+        client.get_table(
+            catalog=default_catalog, schema=default_schema, table="safgsadgsadg"
+        )
+
+    with pytest.raises(DoesNotExistError):
+        client.get_table(
+            catalog=default_catalog,
+            schema=default_schema + "asdasdas",
+            table=default_external_table.name,
+        )
+
+    with pytest.raises(DoesNotExistError):
+        client.get_table(
+            catalog=default_catalog + "asdasdas",
+            schema=default_schema,
+            table=default_external_table.name,
+        )

@@ -17,6 +17,7 @@ JSON_HEADER = {"Content-Type": "application/json"}
 api_path = "/api/2.1/unity-catalog"
 catalogs_endpoint = "/catalogs"
 schemas_endpoint = "/schemas"
+tables_endpoint = "/tables"
 
 
 def _check_already_exists_response(response: requests.Response):
@@ -352,7 +353,15 @@ def get_table(
     Returns the info of the table, if it exists.
     Raises a DoesNotExistException if the table does not exist.
     """
-    raise NotImplementedError
+    url = (
+        uc_url + api_path + tables_endpoint + "/" + catalog + "." + schema + "." + table
+    )
+    response = session.get(url)
+
+    _check_does_not_exist_response(response=response)
+    _check_response_failed(response=response)
+
+    return Table.model_validate_json(response.text)
 
 
 def list_tables(
