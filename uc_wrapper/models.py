@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from enum import Enum
 import datetime
 import uuid
@@ -90,7 +90,7 @@ class Column(BaseModel):
     name: str
     type_text: str | None = None
     type_json: str | None = None
-    data_type: DataType = Field(alias="type_name")
+    data_type: DataType = Field(validation_alias="type_name")
     type_precision: int | None = None
     type_scale: int | None = None
     type_interval_type: int | None = None
@@ -98,6 +98,10 @@ class Column(BaseModel):
     comment: str | None = None
     nullable: bool
     partition_index: int | None = None
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
 
 
 class TableType(Enum):
@@ -143,7 +147,7 @@ class Table(BaseModel):
     catalog_name: str
     schema_name: str
     table_type: TableType
-    file_type: FileType = Field(alias="data_source_format")
+    file_type: FileType = Field(validation_alias="data_source_format")
     columns: list[Column]
     storage_location: str | None = None
     comment: str | None = None
@@ -151,3 +155,7 @@ class Table(BaseModel):
     created_at: datetime.datetime | None = None
     updated_at: datetime.datetime | None = None
     table_id: uuid.UUID | None = None
+
+    model_config = ConfigDict(
+        populate_by_name=True,
+    )
