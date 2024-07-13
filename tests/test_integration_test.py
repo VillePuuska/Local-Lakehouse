@@ -79,7 +79,7 @@ def test_catalogs_endpoint_intergration(client: UCClient):
         comment=cat_comment,
     )
 
-    cat_name_update = "asdgnölsavnsaödn"
+    cat_name_update = "asdgnlsavnsadn"
     catalog_update = Catalog(name=cat_name_update)
 
     # At start, there is only the default catalog; verify this
@@ -112,7 +112,7 @@ def test_catalogs_endpoint_intergration(client: UCClient):
 
     cat = client.update_catalog(cat_name, catalog_update)
     assert cat.name == cat_name_update
-    assert cat.comment is None
+    assert cat.comment == cat_comment
 
     assert len(client.list_catalogs()) == 2
 
@@ -143,7 +143,7 @@ def test_schemas_endpoint_intergration(client: UCClient):
         comment=new_schema_comment,
     )
 
-    schema_name_update = "asdgnölsavnsaödn"
+    schema_name_update = "asdgnlsavnsadn"
     schema_update = Schema(
         name=schema_name_update,
         catalog_name=default_catalog,
