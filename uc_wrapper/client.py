@@ -49,7 +49,7 @@ class UCClient:
         """
         return create_catalog(session=self.session, uc_url=self.uc_url, catalog=catalog)
 
-    def delete_catalog(self, name: str, force: bool) -> bool:
+    def delete_catalog(self, name: str, force: bool = False) -> bool:
         """
         Deletes the catalog with the specified name.`
 
@@ -102,13 +102,22 @@ class UCClient:
         """
         return create_schema(session=self.session, uc_url=self.uc_url, schema=schema)
 
-    def delete_schema(self, catalog: str, schema: str):
+    def delete_schema(self, catalog: str, schema: str, force: bool = False) -> bool:
         """
         Deletes the schema in the catalog.
-        Raises a DoesNotExistError if the schema did not exist.
+
+        If `force == False`, then only deletes if the schema is empty;
+        if `force == True`, deletes the schema even if it has tables.
+
+        Returns True/False indicating if a schema was deleted.
+        Raises a DoesNotExistError if a schema with the name does not exist.
         """
-        delete_schema(
-            session=self.session, uc_url=self.uc_url, catalog=catalog, schema=schema
+        return delete_schema(
+            session=self.session,
+            uc_url=self.uc_url,
+            catalog=catalog,
+            schema=schema,
+            force=force,
         )
 
     def get_schema(self, catalog: str, schema: str) -> Schema:

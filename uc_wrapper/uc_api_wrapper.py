@@ -102,7 +102,7 @@ def delete_catalog(
     session: requests.Session, uc_url: str, name: str, force: bool
 ) -> bool:
     """
-    Deletes the catalog with the specified name.`
+    Deletes the catalog with the specified name.
 
     If `force == False`, then only deletes if the catalog is empty;
     if `force == True`, deletes the catalog even if it has schemas.
@@ -233,16 +233,35 @@ def create_schema(session: requests.Session, uc_url: str, schema: Schema) -> Sch
     return Schema.model_validate_json(response.text)
 
 
-def delete_schema(session: requests.Session, uc_url: str, catalog: str, schema: str):
+def delete_schema(
+    session: requests.Session, uc_url: str, catalog: str, schema: str, force: bool
+) -> bool:
     """
     Deletes the schema in the catalog.
-    Raises a DoesNotExistError if the schema did not exist.
+
+    If `force == False`, then only deletes if the schema is empty;
+    if `force == True`, deletes the schema even if it has tables.
+
+    Returns True/False indicating if a schema was deleted.
+    Raises a DoesNotExistError if a schema with the name does not exist.
     """
     url = uc_url + api_path + schemas_endpoint + "/" + catalog + "." + schema
-    response = session.delete(url)
+    # If we don't convert the boolean `force` to a _lowercase_ string,
+    # requests sets the query parameter to ?force=True or ?force=False
+    # which the Unity Catalog server does not parse properly.
+    response = session.delete(url, params={"force": ("true" if force else "false")})
 
     _check_does_not_exist_response(response=response)
+
+    if response.ok:
+        return True
+
+    if "Cannot delete schema with tables" in response.text:
+        return False
+
     _check_response_failed(response=response)
+
+    return False  # superfluous return that is never reached just to make mypy happy
 
 
 def get_schema(
