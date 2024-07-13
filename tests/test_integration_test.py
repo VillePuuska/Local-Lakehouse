@@ -72,6 +72,8 @@ def client(image: str) -> Generator[UCClient, None, None]:
 def test_catalogs_endpoint_intergration(client: UCClient):
     assert client.health_check()
 
+    default_catalog = "unity"
+
     cat_name = "asdasdasdasfdsadgsa"
     cat_comment = "asd"
     catalog = Catalog(
@@ -86,9 +88,9 @@ def test_catalogs_endpoint_intergration(client: UCClient):
 
     assert len(client.list_catalogs()) == 1
 
-    cat = client.get_catalog("unity")
+    cat = client.get_catalog(default_catalog)
     assert cat is not None
-    assert cat.name == "unity"
+    assert cat.name == default_catalog
 
     with pytest.raises(DoesNotExistError):
         client.get_catalog(cat_name)
@@ -118,15 +120,23 @@ def test_catalogs_endpoint_intergration(client: UCClient):
 
     with pytest.raises(DoesNotExistError):
         client.get_catalog(cat_name)
-    assert not client.delete_catalog(cat_name, False)
+    with pytest.raises(DoesNotExistError):
+        client.delete_catalog(cat_name, False)
     assert len(client.list_catalogs()) == 2
 
-    # Finally we delete the updated catalog; verify it actually gets deleted and we cannot "re-delete" it
+    # Delete the updated catalog; verify it actually gets deleted and we cannot "re-delete" it
 
     assert client.delete_catalog(cat_name_update, False)
     assert len(client.list_catalogs()) == 1
-    assert not client.delete_catalog(cat_name_update, False)
+    with pytest.raises(DoesNotExistError):
+        client.delete_catalog(cat_name_update, False)
     assert len(client.list_catalogs()) == 1
+
+    # Test that we cannot delete the default catalog that has a schema without specifying force=True
+
+    assert not client.delete_catalog(default_catalog, False)
+    assert client.delete_catalog(default_catalog, True)
+    assert len(client.list_catalogs()) == 0
 
 
 def test_schemas_endpoint_intergration(client: UCClient):

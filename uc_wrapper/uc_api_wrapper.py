@@ -108,15 +108,25 @@ def delete_catalog(
     if `force == True`, deletes the catalog even if it has schemas.
 
     Returns True/False indicating if a catalog was deleted.
-
-    NOTE: force-flag for the REST API is bugged and does not prevent deleting a non-empty catalog.
-
-    TODO: Actually handle error responses from the server. After force-flag has been fixed.
+    Raises a DoesNotExistError if a catalog with the name does not exist.
     """
     url = uc_url + api_path + catalogs_endpoint + "/" + name
-    response = session.delete(url, params={"force": force})
+    # If we don't convert the boolean `force` to a _lowercase_ string,
+    # requests sets the query parameter to ?force=True or ?force=False
+    # which the Unity Catalog server does not parse properly.
+    response = session.delete(url, params={"force": ("true" if force else "false")})
 
-    return response.ok
+    _check_does_not_exist_response(response=response)
+
+    if response.ok:
+        return True
+
+    if "Cannot delete catalog with schemas" in response.text:
+        return False
+
+    _check_response_failed(response=response)
+
+    return False  # superfluous return that is never reached just to make mypy happy
 
 
 def list_catalogs(session: requests.Session, uc_url: str) -> list[Catalog]:
