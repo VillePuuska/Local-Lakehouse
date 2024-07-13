@@ -247,6 +247,12 @@ def test_schemas_endpoint_intergration(client: UCClient):
     with pytest.raises(DoesNotExistError):
         client.delete_schema(catalog=default_catalog, schema=new_schema_name)
 
+    # Test that we cannot delete the default schema that has tables without specifying force=True
+
+    assert not client.delete_schema(default_catalog, default_schema, False)
+    assert client.delete_schema(default_catalog, default_schema, True)
+    assert len(client.list_schemas(catalog=default_catalog)) == 0
+
 
 def test_tables_endpoint_integration(client: UCClient):
     assert client.health_check()
