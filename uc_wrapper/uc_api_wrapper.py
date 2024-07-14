@@ -362,7 +362,24 @@ def create_table(session: requests.Session, uc_url: str, table: Table) -> Table:
     Returns a new Table with the remaining fields populated.
     Raises an AlreadyExistsError if a Table with the name already exists in the same catalog.
     """
-    raise NotImplementedError
+    url = uc_url + api_path + tables_endpoint
+    data = {
+        "name": table.name,
+        "catalog_name": table.catalog_name,
+        "schema_name": table.schema_name,
+        "table_type": table.table_type,
+        "data_source_format": table.file_type,
+        "columns": [col.model_dump(by_alias=True) for col in table.columns],
+        "storage_location": table.storage_location,
+        "comment": table.comment,
+        "properties": table.properties,
+    }
+    response = session.post(url, data=json.dumps(data), headers=JSON_HEADER)
+
+    _check_already_exists_response(response=response)
+    _check_response_failed(response=response)
+
+    return Table.model_validate_json(response.text)
 
 
 def delete_table(

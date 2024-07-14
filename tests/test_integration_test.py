@@ -2,6 +2,7 @@ from testcontainers.core.image import DockerImage  # type: ignore
 from testcontainers.core.container import DockerContainer  # type: ignore
 from testcontainers.core.waiting_utils import wait_for_logs  # type: ignore
 import os
+import tempfile
 import time
 import requests
 import pytest
@@ -310,6 +311,31 @@ def test_tables_endpoint_integration(client: UCClient):
         ],
     )
 
+    tmpfilepath = tempfile.mkdtemp()
+
+    new_external_table = Table(
+        name="testasdadadassfgsdg",
+        catalog_name=default_catalog,
+        schema_name=default_schema,
+        table_type=TableType.EXTERNAL,
+        file_type=FileType.DELTA,
+        columns=[
+            Column(
+                name="col1",
+                data_type=DataType.INT,
+                position=0,
+                nullable=False,
+            ),
+            Column(
+                name="col2",
+                data_type=DataType.DOUBLE,
+                position=1,
+                nullable=True,
+            ),
+        ],
+        storage_location="file://" + tmpfilepath,
+    )
+
     for default_table in [default_external_table, default_managed_table]:
         table = client.get_table(
             catalog=default_catalog,
@@ -321,6 +347,8 @@ def test_tables_endpoint_integration(client: UCClient):
         assert table.schema_name == default_table.schema_name
         assert table.table_type == default_table.table_type
         assert table.file_type == default_table.file_type
+
+        assert table.storage_location is not None and table.storage_location != ""
 
         assert len(table.columns) == len(default_table.columns)
         for i in range(len(table.columns)):
@@ -359,3 +387,15 @@ def test_tables_endpoint_integration(client: UCClient):
 
     with pytest.raises(DoesNotExistError):
         client.list_tables(catalog=default_catalog, schema=default_schema + "asdasddas")
+
+    created_table = client.create_table(new_external_table)
+    assert created_table.name == new_external_table.name
+    assert created_table.catalog_name == default_catalog
+    assert created_table.schema_name == default_schema
+    assert len(created_table.columns) == 2
+    assert created_table.storage_location == new_external_table.storage_location
+    assert created_table.created_at is not None
+    assert created_table.updated_at is None
+    assert created_table.table_id is not None
+
+    assert len(client.list_tables(catalog=default_catalog, schema=default_schema)) == 4

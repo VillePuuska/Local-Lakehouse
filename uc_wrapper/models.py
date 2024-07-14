@@ -1,7 +1,8 @@
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, computed_field
 from enum import Enum
 import datetime
 import uuid
+import json
 
 
 class Catalog(BaseModel):
@@ -32,7 +33,7 @@ class Schema(BaseModel):
     schema_id: uuid.UUID | None = None
 
 
-class DataType(Enum):
+class DataType(str, Enum):
     """
     Datatype of a column. Corresponding Unity Catalog model: ColumnTypeName.
     Possible values:
@@ -88,9 +89,9 @@ class Column(BaseModel):
     """
 
     name: str
-    type_text: str | None = None
-    type_json: str | None = None
-    data_type: DataType = Field(validation_alias="type_name")
+    data_type: DataType = Field(
+        validation_alias="type_name", serialization_alias="type_name"
+    )
     type_precision: int | None = None
     type_scale: int | None = None
     type_interval_type: int | None = None
@@ -98,13 +99,32 @@ class Column(BaseModel):
     comment: str | None = None
     nullable: bool
     partition_index: int | None = None
+    type_json_override: str | None = None  # TODO: better way to handle complex types?
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def type_text(self) -> str:
+        return self.data_type.value.lower()
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def type_json(self) -> str:  # TODO: better way to handle complex types?
+        if self.type_json_override is not None:
+            return self.type_json_override
+        dct = {
+            "name": self.name,
+            "type": self.type_text,
+            "nullable": self.nullable,
+            "metadata": {},
+        }
+        return json.dumps(dct)
 
     model_config = ConfigDict(
         populate_by_name=True,
     )
 
 
-class TableType(Enum):
+class TableType(str, Enum):
     """
     Type of a table. Corresponding Unity Catalog model: TableType.
     Possible values:
@@ -116,7 +136,7 @@ class TableType(Enum):
     EXTERNAL = "EXTERNAL"
 
 
-class FileType(Enum):
+class FileType(str, Enum):
     """
     Type of a file. Corresponding Unity Catalog model: DataSourceFormat.
     Possible values:
