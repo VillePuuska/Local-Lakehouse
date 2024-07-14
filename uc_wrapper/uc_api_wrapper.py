@@ -399,4 +399,33 @@ def list_tables(
     """
     Returns a list of tables in the specified catalog.schema from Unity Catalog.
     """
-    raise NotImplementedError
+    url = uc_url + api_path + tables_endpoint
+
+    tables = []
+    token = None
+
+    while True:
+        response = session.get(
+            url,
+            params={
+                "page_token": token,
+                "catalog_name": catalog,
+                "schema_name": schema,
+            },
+        )
+
+        _check_does_not_exist_response(response=response)
+        _check_response_failed(response=response)
+
+        response_dict = response.json()
+        token = response_dict["next_page_token"]
+        tables.extend(
+            [
+                Table.model_validate(table, strict=False)
+                for table in response_dict["tables"]
+            ]
+        )
+        if token is None or token == "":
+            break
+
+    return tables

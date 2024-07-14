@@ -347,3 +347,15 @@ def test_tables_endpoint_integration(client: UCClient):
             schema=default_schema,
             table=default_external_table.name,
         )
+
+    tables = client.list_tables(catalog=default_catalog, schema=default_schema)
+    assert len(tables) == 3
+    for table in tables:
+        assert table.catalog_name == default_catalog
+        assert table.schema_name == default_schema
+
+    with pytest.raises(DoesNotExistError):
+        client.list_tables(catalog=default_catalog + "asdadsa", schema=default_schema)
+
+    with pytest.raises(DoesNotExistError):
+        client.list_tables(catalog=default_catalog, schema=default_schema + "asdasddas")
