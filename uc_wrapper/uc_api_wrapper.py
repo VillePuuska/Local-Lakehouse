@@ -183,25 +183,17 @@ def update_catalog(
         - properties.
     Returns a Catalog with updated information.
     Raises a DoesNotExistError if a catalog with the name does not exist.
-    Raises an AlreadyExistsError if the new name is the same as the old name. Unity Catalog
-    does not allow updating and keeping the same name atm.
+    Raises an AlreadyExistsError if there is a catalog with the new name.
     """
-    # BUG? Unity Catalog REST API does not allow updating a catalog without changing the name:
-    # - If the new_name is set and a catalog with the same name already exists, REST API returns ALREADY_EXISTS
-    # - If the new_name is omitted, REST API returns INVALID_ARGUMENT
-    if name == catalog.name:
-        raise AlreadyExistsError(
-            "Unity Catalog does not allow update a catalog without changing the name atm."
-        )
-
     data = {
-        "new_name": catalog.name,
+        "new_name": (catalog.name if catalog.name != name else None),
         "comment": catalog.comment,
         "properties": catalog.properties,
     }
     url = uc_url + api_path + catalogs_endpoint + "/" + name
     response = session.patch(url, data=json.dumps(data), headers=JSON_HEADER)
 
+    _check_already_exists_response(response=response)
     _check_does_not_exist_response(response=response)
     _check_response_failed(response=response)
 

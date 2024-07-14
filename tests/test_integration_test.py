@@ -83,7 +83,9 @@ def test_catalogs_endpoint_intergration(client: UCClient):
     )
 
     cat_name_update = "asdgnlsavnsadn"
+    cat_comment_update = "ayo"
     catalog_update = Catalog(name=cat_name_update)
+    catalog_update2 = Catalog(name=cat_name_update, comment=cat_comment_update)
 
     # At start, there is only the default catalog; verify this
 
@@ -111,7 +113,13 @@ def test_catalogs_endpoint_intergration(client: UCClient):
     with pytest.raises(DoesNotExistError):
         client.update_catalog("xyz_this_cat_does_not_exist", catalog_update)
 
-    # Update the catalog we added; verify it was updated and the old catalog does not exist
+    # Try to update the default catalog with the info of the catalog we created;
+    # this should not go through
+
+    with pytest.raises(AlreadyExistsError):
+        client.update_catalog(default_catalog, catalog)
+
+    # Update the catalog name; verify it was updated and the old catalog does not exist
 
     cat = client.update_catalog(cat_name, catalog_update)
     assert cat.name == cat_name_update
@@ -124,6 +132,12 @@ def test_catalogs_endpoint_intergration(client: UCClient):
     with pytest.raises(DoesNotExistError):
         client.delete_catalog(cat_name, False)
     assert len(client.list_catalogs()) == 2
+
+    # Update just the comment but not the name; this used to be impossible due to a UC bug
+
+    cat = client.update_catalog(cat_name_update, catalog_update2)
+    assert cat.name == cat_name_update
+    assert cat.comment == cat_comment_update
 
     # Delete the updated catalog; verify it actually gets deleted and we cannot "re-delete" it
 
