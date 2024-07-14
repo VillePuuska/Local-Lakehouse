@@ -350,6 +350,8 @@ def test_tables_endpoint_integration(client: UCClient):
         storage_location="file://" + tmpfilepath,
     )
 
+    # Verify that two of the three default tables exist and get_table returns them
+
     for default_table in [default_external_table, default_managed_table]:
         table = client.get_table(
             catalog=default_catalog,
@@ -390,6 +392,8 @@ def test_tables_endpoint_integration(client: UCClient):
             table=default_external_table.name,
         )
 
+    # Verify that list_tables returns the three default tables
+
     tables = client.list_tables(catalog=default_catalog, schema=default_schema)
     assert len(tables) == 3
     for table in tables:
@@ -402,6 +406,8 @@ def test_tables_endpoint_integration(client: UCClient):
     with pytest.raises(DoesNotExistError):
         client.list_tables(catalog=default_catalog, schema=default_schema + "asdasddas")
 
+    # Create a new table and verify it gets added
+
     created_table = client.create_table(new_external_table)
     assert created_table.name == new_external_table.name
     assert created_table.catalog_name == default_catalog
@@ -413,3 +419,14 @@ def test_tables_endpoint_integration(client: UCClient):
     assert created_table.table_id is not None
 
     assert len(client.list_tables(catalog=default_catalog, schema=default_schema)) == 4
+
+    # Delete the table we created and verify it gets deleted
+
+    client.delete_table(default_catalog, default_schema, new_external_table.name)
+
+    assert len(client.list_tables(catalog=default_catalog, schema=default_schema)) == 3
+    with pytest.raises(DoesNotExistError):
+        client.get_table(default_catalog, default_schema, new_external_table.name)
+
+    with pytest.raises(DoesNotExistError):
+        client.delete_table(default_catalog, default_schema, new_external_table.name)

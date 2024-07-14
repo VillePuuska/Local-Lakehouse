@@ -381,7 +381,13 @@ def delete_table(
     Deletes the table.
     Raises a DoesNotExistError if the table did not exist.
     """
-    raise NotImplementedError
+    url = (
+        uc_url + api_path + tables_endpoint + "/" + catalog + "." + schema + "." + table
+    )
+    response = session.delete(url)
+
+    _check_does_not_exist_response(response=response)
+    _check_response_failed(response=response)
 
 
 def get_table(
