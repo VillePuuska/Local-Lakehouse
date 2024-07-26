@@ -1,5 +1,7 @@
 import requests
-from .models import Catalog, Schema, Table
+import polars as pl
+from .models import Catalog, Schema, Table, TableType
+from .dataframe import WriteMode, SchemaEvolution
 from .uc_api_wrapper import (
     create_catalog,
     create_schema,
@@ -217,3 +219,55 @@ class UCClient:
         return list_tables(
             session=self.session, uc_url=self.uc_url, catalog=catalog, schema=schema
         )
+
+    def read_table(self, catalog: str, schema: str, name: str) -> pl.DataFrame:
+        """
+        Reads the specified table from Unity Catalog and returns it as a Polars DataFrame.
+        """
+        raise NotImplementedError
+
+    def scan_table(self, catalog: str, schema: str, name: str) -> pl.LazyFrame:
+        """
+        Lazily reads/scans the specified table from Unity Catalog and returns it as a Polars LazyFrame.
+        """
+        raise NotImplementedError
+
+    def write_table(
+        self,
+        df: pl.DataFrame | pl.LazyFrame,
+        catalog: str,
+        schema: str,
+        name: str,
+        mode: WriteMode | None,
+        schema_evolution: SchemaEvolution | None,
+    ) -> None:
+        """
+        Writes the Polars DataFrame or LazyFrame `df` to the Unity Catalog table
+        <catalog>.<schema>.<name>. If the table does not already exist, it is created.
+
+        `mode` specifies the writing mode:
+            - WriteMode.APPEND to append to the existing table, IF it exists.
+            - WriteMode.OVERWRITE replaces/overwrites the existing table, IF it exists.
+
+        `schema_evolution` specifies how to handle possible schema mismatches:
+            - SchemaEvolution.STRICT raises an Exception if there is a difference in schemas.
+            - SchemaEvolution.UNION will attempt to take the union of the schemas; raises if impossible.
+            - SchemaEvolution.OVERWRITE will attempt to cast the existing table to the schema of the new
+              DataFrame/LazyFrame; raises if impossible.
+        """
+        raise NotImplementedError
+
+    def create_as_table(
+        self,
+        df: pl.DataFrame | pl.LazyFrame,
+        catalog: str,
+        schema: str,
+        name: str,
+        type: TableType = TableType.MANAGED,
+        location: str | None = None,
+    ) -> Table:
+        """
+        Creates a new table to Unity Catalog with the schema of the Polars DataFrame or LazyFrame `df`
+        and writes `df` to the new table. Raises an AlreadyExistsError if the table alredy exists.
+        """
+        raise NotImplementedError
