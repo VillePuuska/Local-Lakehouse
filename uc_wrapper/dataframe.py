@@ -1,6 +1,6 @@
 import polars as pl
 from enum import Enum
-from .models import Table
+from .models import Table, FileType
 
 
 class WriteMode(str, Enum):
@@ -15,7 +15,14 @@ class SchemaEvolution(str, Enum):
 
 
 def read_table(table: Table) -> pl.DataFrame:
-    raise NotImplementedError
+    path = table.storage_location
+    assert path is not None
+    match table.file_type:
+        case FileType.DELTA:
+            df = pl.read_delta(source=path)
+        case _:
+            raise NotImplementedError
+    return df
 
 
 def scan_table(table: Table) -> pl.LazyFrame:

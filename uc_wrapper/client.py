@@ -1,7 +1,7 @@
 import requests
 import polars as pl
-from .models import Catalog, Schema, Table, TableType
-from .dataframe import WriteMode, SchemaEvolution
+from .models import Catalog, Schema, Table, TableType, FileType
+from .dataframe import WriteMode, SchemaEvolution, read_table
 from .uc_api_wrapper import (
     create_catalog,
     create_schema,
@@ -224,7 +224,8 @@ class UCClient:
         """
         Reads the specified table from Unity Catalog and returns it as a Polars DataFrame.
         """
-        raise NotImplementedError
+        table = self.get_table(catalog=catalog, schema=schema, table=name)
+        return read_table(table=table)
 
     def scan_table(self, catalog: str, schema: str, name: str) -> pl.LazyFrame:
         """
@@ -263,6 +264,7 @@ class UCClient:
         catalog: str,
         schema: str,
         name: str,
+        filetype: FileType = FileType.DELTA,
         type: TableType = TableType.MANAGED,
         location: str | None = None,
     ) -> Table:
