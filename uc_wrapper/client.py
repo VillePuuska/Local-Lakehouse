@@ -1,7 +1,7 @@
 import requests
 import polars as pl
 from .models import Catalog, Schema, Table, TableType, FileType
-from .dataframe import WriteMode, SchemaEvolution, read_table, scan_table
+from .dataframe import WriteMode, SchemaEvolution, read_table, scan_table, write_table
 from .uc_api_wrapper import (
     create_catalog,
     create_schema,
@@ -236,7 +236,7 @@ class UCClient:
 
     def write_table(
         self,
-        df: pl.DataFrame | pl.LazyFrame,
+        df: pl.DataFrame,
         catalog: str,
         schema: str,
         name: str,
@@ -244,7 +244,7 @@ class UCClient:
         schema_evolution: SchemaEvolution | None,
     ) -> None:
         """
-        Writes the Polars DataFrame or LazyFrame `df` to the Unity Catalog table
+        Writes the Polars DataFrame `df` to the Unity Catalog table
         <catalog>.<schema>.<name>. If the table does not already exist, it is created.
 
         `mode` specifies the writing mode:
@@ -255,9 +255,16 @@ class UCClient:
             - SchemaEvolution.STRICT raises an Exception if there is a difference in schemas.
             - SchemaEvolution.UNION will attempt to take the union of the schemas; raises if impossible.
             - SchemaEvolution.OVERWRITE will attempt to cast the existing table to the schema of the new
-              DataFrame/LazyFrame; raises if impossible.
+              DataFrame; raises if impossible.
         """
-        raise NotImplementedError
+        table = self.get_table(catalog=catalog, schema=schema, table=name)
+        new_columns = write_table(
+            table=table, df=df, mode=mode, schema_evolution=schema_evolution
+        )
+        if new_columns is not None:
+            raise Exception(
+                "TODO: Columns need to be updated in the Unity Catalog but I'm too lazy to implement this today."
+            )
 
     def create_as_table(
         self,

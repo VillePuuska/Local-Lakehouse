@@ -16,3 +16,8 @@ class DoesNotExistError(Exception):
 class UnsupportedOperationError(Exception):
     def __init__(self, msg: str) -> None:
         self.msg = msg
+
+
+class SchemaMismatchError(Exception):
+    def __init__(self, msg: str) -> None:
+        self.msg = msg

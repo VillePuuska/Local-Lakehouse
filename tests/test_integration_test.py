@@ -24,6 +24,9 @@ from uc_wrapper import (
     TableType,
     FileType,
     DataType,
+    WriteMode,
+    SchemaEvolution,
+    SchemaMismatchError,
 )
 
 
@@ -533,13 +536,13 @@ def test_dataframe_operations(client: UCClient, df: pl.DataFrame, filetype: File
             ),
             Column(
                 name="ints",
-                data_type=DataType.INT,
+                data_type=DataType.LONG,
                 position=1,
                 nullable=False,
             ),
             Column(
                 name="floats",
-                data_type=DataType.FLOAT,
+                data_type=DataType.DOUBLE,
                 position=2,
                 nullable=False,
             ),
@@ -562,6 +565,7 @@ def test_dataframe_operations(client: UCClient, df: pl.DataFrame, filetype: File
             )
         )
 
+        # Test read_table and scan_table
         df_read = client.read_table(
             catalog=default_catalog, schema=default_schema, name=table_name
         )
@@ -572,3 +576,36 @@ def test_dataframe_operations(client: UCClient, df: pl.DataFrame, filetype: File
                 catalog=default_catalog, schema=default_schema, name=table_name
             )
             assert_frame_equal(pl.LazyFrame(df), df_scan)
+
+        # Test APPEND writes; only supported for DELTA
+        if filetype == FileType.DELTA:
+            df2 = random_df()
+            client.write_table(
+                df2,
+                catalog=default_catalog,
+                schema=default_schema,
+                name=table_name,
+                mode=WriteMode.APPEND,
+                schema_evolution=SchemaEvolution.STRICT,
+            )
+            df_read2 = client.read_table(
+                catalog=default_catalog, schema=default_schema, name=table_name
+            )
+            assert_frame_equal(pl.concat([df, df2]), df_read2, check_row_order=False)
+            assert_frame_equal(
+                pl.concat([df, df2]),
+                pl.read_delta(source=filepath),
+                check_row_order=False,
+            )
+
+            with pytest.raises(SchemaMismatchError):
+                df3 = random_df()
+                df3 = df3.cast({"ints": pl.String})
+                client.write_table(
+                    df3,
+                    catalog=default_catalog,
+                    schema=default_schema,
+                    name=table_name,
+                    mode=WriteMode.APPEND,
+                    schema_evolution=SchemaEvolution.STRICT,
+                )
