@@ -17,9 +17,18 @@ class SchemaEvolution(str, Enum):
 def read_table(table: Table) -> pl.DataFrame:
     path = table.storage_location
     assert path is not None
+    if not path.startswith("file://"):
+        raise NotImplementedError
+    path = path.removeprefix("file://")
     match table.file_type:
         case FileType.DELTA:
             df = pl.read_delta(source=path)
+        case FileType.PARQUET:
+            df = pl.read_parquet(source=path)
+        case FileType.CSV:
+            df = pl.read_csv(source=path)
+        case FileType.AVRO:
+            df = pl.read_avro(source=path)
         case _:
             raise NotImplementedError
     return df

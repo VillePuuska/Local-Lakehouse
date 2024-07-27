@@ -496,6 +496,9 @@ def random_lf() -> pl.LazyFrame:
     "df,filetype",
     [
         (random_df(), FileType.DELTA),
+        (random_df(), FileType.PARQUET),
+        (random_df(), FileType.CSV),
+        (random_df(), FileType.AVRO),
     ],
 )
 def test_dataframe_operations(client: UCClient, df: pl.DataFrame, filetype: FileType):
@@ -506,6 +509,21 @@ def test_dataframe_operations(client: UCClient, df: pl.DataFrame, filetype: File
     table_name = "test_table"
 
     with tempfile.TemporaryDirectory() as tmpdir:
+        match filetype:
+            case FileType.DELTA:
+                filepath = tmpdir
+                df.write_delta(target=tmpdir, mode="error")
+            case FileType.PARQUET:
+                filepath = os.path.join(tmpdir, table_name + ".parquet")
+                df.write_parquet(file=filepath)
+            case FileType.CSV:
+                filepath = os.path.join(tmpdir, table_name + ".csv")
+                df.write_csv(file=filepath, include_header=True)
+            case FileType.AVRO:
+                filepath = os.path.join(tmpdir, table_name + ".avro")
+                df.write_avro(file=filepath)
+            case _:
+                raise NotImplementedError
         columns = [
             Column(
                 name="id",
@@ -532,7 +550,6 @@ def test_dataframe_operations(client: UCClient, df: pl.DataFrame, filetype: File
                 nullable=False,
             ),
         ]
-
         client.create_table(
             Table(
                 name=table_name,
@@ -541,15 +558,9 @@ def test_dataframe_operations(client: UCClient, df: pl.DataFrame, filetype: File
                 table_type=TableType.EXTERNAL,
                 file_type=filetype,
                 columns=columns,
-                storage_location=tmpdir,
+                storage_location=filepath,
             )
         )
-
-        match filetype:
-            case FileType.DELTA:
-                df.write_delta(target=tmpdir, mode="error")
-            case _:
-                raise NotImplementedError
 
         df_read = client.read_table(
             catalog=default_catalog, schema=default_schema, name=table_name
