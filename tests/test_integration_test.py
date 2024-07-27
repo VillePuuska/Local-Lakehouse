@@ -5,6 +5,12 @@ import os
 import tempfile
 import time
 import requests
+import polars as pl
+from polars.testing import assert_frame_equal
+import random
+import uuid
+import string
+import tempfile
 import pytest
 from collections.abc import Generator
 from uc_wrapper import (
@@ -430,3 +436,122 @@ def test_tables_endpoint_integration(client: UCClient):
 
     with pytest.raises(DoesNotExistError):
         client.delete_table(default_catalog, default_schema, new_external_table.name)
+
+
+def random_df() -> pl.DataFrame:
+    rows = 10
+    uuids = [str(uuid.uuid4()) for _ in range(rows)]
+    ints = [random.randint(0, 10000) for _ in range(rows)]
+    floats = [random.uniform(0, 10000) for _ in range(rows)]
+    strings = [
+        "".join(
+            random.choices(population=string.ascii_letters, k=random.randint(2, 256))
+        )
+        for _ in range(rows)
+    ]
+    return pl.DataFrame(
+        {
+            "id": uuids,
+            "ints": ints,
+            "floats": floats,
+            "strings": strings,
+        },
+        schema={
+            "id": pl.String,
+            "ints": pl.Int64,
+            "floats": pl.Float64,
+            "strings": pl.String,
+        },
+    )
+
+
+def random_lf() -> pl.LazyFrame:
+    rows = 10
+    uuids = [str(uuid.uuid4()) for _ in range(rows)]
+    ints = [random.randint(0, 10000) for _ in range(rows)]
+    floats = [random.uniform(0, 10000) for _ in range(rows)]
+    strings = [
+        "".join(
+            random.choices(population=string.ascii_letters, k=random.randint(2, 256))
+        )
+        for _ in range(rows)
+    ]
+    return pl.LazyFrame(
+        {
+            "id": uuids,
+            "ints": ints,
+            "floats": floats,
+            "strings": strings,
+        },
+        schema={
+            "id": pl.String,
+            "ints": pl.Int64,
+            "floats": pl.Float64,
+            "strings": pl.String,
+        },
+    )
+
+
+@pytest.mark.parametrize(
+    "df,filetype",
+    [
+        (random_df(), FileType.DELTA),
+    ],
+)
+def test_dataframe_operations(client: UCClient, df: pl.DataFrame, filetype: FileType):
+    assert client.health_check()
+
+    default_catalog = "unity"
+    default_schema = "default"
+    table_name = "test_table"
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        columns = [
+            Column(
+                name="id",
+                data_type=DataType.STRING,
+                position=0,
+                nullable=False,
+            ),
+            Column(
+                name="ints",
+                data_type=DataType.INT,
+                position=1,
+                nullable=False,
+            ),
+            Column(
+                name="floats",
+                data_type=DataType.FLOAT,
+                position=2,
+                nullable=False,
+            ),
+            Column(
+                name="strings",
+                data_type=DataType.STRING,
+                position=3,
+                nullable=False,
+            ),
+        ]
+
+        client.create_table(
+            Table(
+                name=table_name,
+                catalog_name=default_catalog,
+                schema_name=default_schema,
+                table_type=TableType.EXTERNAL,
+                file_type=filetype,
+                columns=columns,
+                storage_location=tmpdir,
+            )
+        )
+
+        match filetype:
+            case FileType.DELTA:
+                df.write_delta(target=tmpdir, mode="error")
+            case _:
+                raise NotImplementedError
+
+        df_read = client.read_table(
+            catalog=default_catalog, schema=default_schema, name=table_name
+        )
+        assert_frame_equal(df, df_read)
