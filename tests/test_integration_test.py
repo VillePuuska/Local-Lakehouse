@@ -566,3 +566,9 @@ def test_dataframe_operations(client: UCClient, df: pl.DataFrame, filetype: File
             catalog=default_catalog, schema=default_schema, name=table_name
         )
         assert_frame_equal(df, df_read)
+
+        if filetype != FileType.AVRO:
+            df_scan = client.scan_table(
+                catalog=default_catalog, schema=default_schema, name=table_name
+            )
+            assert_frame_equal(pl.LazyFrame(df), df_scan)
