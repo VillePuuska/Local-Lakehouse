@@ -1,4 +1,5 @@
 import polars as pl
+import os
 from enum import Enum
 from .exceptions import UnsupportedOperationError, SchemaMismatchError
 from .models import Table, FileType, Column, DataType
@@ -15,7 +16,7 @@ class SchemaEvolution(str, Enum):
     OVERWRITE = "OVERWRITE"
 
 
-def polars_type_to_uc_type(t: pl.DataType) -> DataType:
+def polars_type_to_uc_type(t: pl.PolarsDataType) -> DataType:
     match t:
         case pl.Decimal:
             return DataType.DECIMAL
@@ -50,7 +51,45 @@ def polars_type_to_uc_type(t: pl.DataType) -> DataType:
         case pl.Null:
             return DataType.NULL
         case _:
-            raise UnsupportedOperationError(f"Unsupported datatype: {type(t)}")
+            raise UnsupportedOperationError(f"Unsupported datatype: {t}")
+
+
+def uc_type_to_polars_type(t: DataType) -> pl.PolarsDataType:
+    match t:
+        case DataType.BOOLEAN:
+            return pl.Boolean
+        case DataType.BYTE:
+            return pl.Int8
+        case DataType.SHORT:
+            return pl.Int16
+        case DataType.INT:
+            return pl.Int32
+        case DataType.LONG:
+            return pl.Int64
+        case DataType.FLOAT:
+            return pl.Float32
+        case DataType.DOUBLE:
+            return pl.Float64
+        case DataType.DATE:
+            return pl.Date
+        case DataType.TIMESTAMP:
+            return pl.Datetime
+        case DataType.STRING:
+            return pl.String
+        case DataType.BINARY:
+            return pl.Binary
+        case DataType.DECIMAL:
+            return pl.Decimal
+        case DataType.ARRAY:
+            return pl.Array
+        case DataType.STRUCT:
+            return pl.Struct
+        case DataType.CHAR:
+            return pl.String
+        case DataType.NULL:
+            return pl.Null
+        case _:
+            raise UnsupportedOperationError(f"Unsupported datatype: {t.value}")
 
 
 def df_schema_to_uc_schema(df: pl.DataFrame | pl.LazyFrame) -> list[Column]:
@@ -75,7 +114,17 @@ def check_schema_equality(left: list[Column], right: list[Column]) -> bool:
             return False
         if left_col.data_type != right_col.data_type:
             return False
+        if left_col.partition_index != right_col.partition_index:
+            return False
     return True
+
+
+def get_partition_columns(cols: list[Column]) -> list[Column]:
+    partition_cols = [col for col in cols if col.partition_index is not None]
+    # mypy doesn't understand that the type of x.partition_index is int in the following lambda
+    # and instead thinks it's int | None and complains if we don't just ignore it.
+    # TODO: find a better workaroudn than just ignoring?
+    return sorted(partition_cols, key=lambda x: x.partition_index)  # type: ignore
 
 
 def read_table(table: Table) -> pl.DataFrame:
@@ -89,7 +138,20 @@ def read_table(table: Table) -> pl.DataFrame:
             df = pl.read_delta(source=path)
 
         case FileType.PARQUET:
-            df = pl.read_parquet(source=path)
+            partition_cols = get_partition_columns(table.columns)
+            if len(partition_cols) == 0:
+                df = pl.read_parquet(source=path)
+            else:
+                # TODO: There HAS to be a nicer way to do this. Try with Polars >1.0?
+                df = pl.read_parquet(
+                    source=os.path.join(
+                        path, *["**" for _ in range(len(partition_cols))], "*.parquet"
+                    ),
+                    hive_schema={
+                        col.name: uc_type_to_polars_type(col.data_type)
+                        for col in partition_cols
+                    },
+                )
 
         case FileType.CSV:
             df = pl.read_csv(source=path)
@@ -114,7 +176,20 @@ def scan_table(table: Table) -> pl.LazyFrame:
             df = pl.scan_delta(source=path)
 
         case FileType.PARQUET:
-            df = pl.scan_parquet(source=path)
+            partition_cols = get_partition_columns(table.columns)
+            if len(partition_cols) == 0:
+                df = pl.scan_parquet(source=path)
+            else:
+                # TODO: There HAS to be a nicer way to do this. Try with Polars >1.0?
+                df = pl.scan_parquet(
+                    source=os.path.join(
+                        path, *["**" for _ in range(len(partition_cols))], "*.parquet"
+                    ),
+                    hive_schema={
+                        col.name: uc_type_to_polars_type(col.data_type)
+                        for col in partition_cols
+                    },
+                )
 
         case FileType.CSV:
             df = pl.scan_csv(source=path)
@@ -172,19 +247,19 @@ def write_table(
 
         case WriteMode.APPEND, _:
             raise UnsupportedOperationError(
-                "Appending is only supported with Delta Lake tables."
+                f"Appending is not supported for {table.file_type.value}."
             )
 
-        case _, FileType.DELTA, _:
+        case WriteMode.OVERWRITE, FileType.DELTA, _:
             raise NotImplementedError
 
-        case _, FileType.PARQUET, _:
+        case WriteMode.OVERWRITE, FileType.PARQUET, _:
             raise NotImplementedError
 
-        case _, FileType.CSV, _:
+        case WriteMode.OVERWRITE, FileType.CSV, _:
             raise NotImplementedError
 
-        case _, FileType.AVRO, _:
+        case WriteMode.OVERWRITE, FileType.AVRO, _:
             raise NotImplementedError
 
         case _:

@@ -468,6 +468,16 @@ def random_df() -> pl.DataFrame:
     )
 
 
+def random_partitioned_df() -> pl.DataFrame:
+    df = random_df()
+    part1 = random.choices(population=[0, 1, 2], k=df.height)
+    part2 = random.choices(population=[0, 1, 2], k=df.height)
+    df = df.with_columns(
+        [pl.Series(part1).alias("part1"), pl.Series(part2).alias("part2")]
+    )
+    return df
+
+
 def random_lf() -> pl.LazyFrame:
     rows = 10
     uuids = [str(uuid.uuid4()) for _ in range(rows)]
@@ -504,7 +514,9 @@ def random_lf() -> pl.LazyFrame:
         (random_df(), FileType.AVRO),
     ],
 )
-def test_dataframe_operations(client: UCClient, df: pl.DataFrame, filetype: FileType):
+def test_basic_dataframe_operations(
+    client: UCClient, df: pl.DataFrame, filetype: FileType
+):
     assert client.health_check()
 
     default_catalog = "unity"
@@ -569,13 +581,13 @@ def test_dataframe_operations(client: UCClient, df: pl.DataFrame, filetype: File
         df_read = client.read_table(
             catalog=default_catalog, schema=default_schema, name=table_name
         )
-        assert_frame_equal(df, df_read)
+        assert_frame_equal(df, df_read, check_row_order=False)
 
         if filetype != FileType.AVRO:
             df_scan = client.scan_table(
                 catalog=default_catalog, schema=default_schema, name=table_name
             )
-            assert_frame_equal(pl.LazyFrame(df), df_scan)
+            assert_frame_equal(pl.LazyFrame(df), df_scan, check_row_order=False)
 
         # Test APPEND writes; only supported for DELTA
         if filetype == FileType.DELTA:
@@ -609,3 +621,100 @@ def test_dataframe_operations(client: UCClient, df: pl.DataFrame, filetype: File
                     mode=WriteMode.APPEND,
                     schema_evolution=SchemaEvolution.STRICT,
                 )
+
+
+@pytest.mark.parametrize(
+    "df,filetype",
+    [
+        (random_partitioned_df(), FileType.DELTA),
+        (random_partitioned_df(), FileType.PARQUET),
+    ],
+)
+def test_partitioned_dataframe_operations(
+    client: UCClient, df: pl.DataFrame, filetype: FileType
+):
+    assert client.health_check()
+
+    default_catalog = "unity"
+    default_schema = "default"
+    table_name = "test_table"
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        match filetype:
+            case FileType.DELTA:
+                filepath = tmpdir
+                df.write_delta(
+                    target=tmpdir,
+                    mode="error",
+                    delta_write_options={"partition_by": ["part1", "part2"]},
+                )
+            case FileType.PARQUET:
+                filepath = tmpdir
+                df.write_parquet(
+                    file=filepath,
+                    use_pyarrow=True,
+                    pyarrow_options={"partition_cols": ["part1", "part2"]},
+                )
+            case _:
+                raise NotImplementedError
+        columns = [
+            Column(
+                name="id",
+                data_type=DataType.STRING,
+                position=0,
+                nullable=False,
+            ),
+            Column(
+                name="ints",
+                data_type=DataType.LONG,
+                position=1,
+                nullable=False,
+            ),
+            Column(
+                name="floats",
+                data_type=DataType.DOUBLE,
+                position=2,
+                nullable=False,
+            ),
+            Column(
+                name="strings",
+                data_type=DataType.STRING,
+                position=3,
+                nullable=False,
+            ),
+            Column(
+                name="part1",
+                data_type=DataType.LONG,
+                position=4,
+                nullable=False,
+                partition_index=0,
+            ),
+            Column(
+                name="part2",
+                data_type=DataType.LONG,
+                position=5,
+                nullable=False,
+                partition_index=1,
+            ),
+        ]
+        client.create_table(
+            Table(
+                name=table_name,
+                catalog_name=default_catalog,
+                schema_name=default_schema,
+                table_type=TableType.EXTERNAL,
+                file_type=filetype,
+                columns=columns,
+                storage_location=filepath,
+            )
+        )
+
+        df_read = client.read_table(
+            catalog=default_catalog, schema=default_schema, name=table_name
+        )
+        assert_frame_equal(df, df_read, check_row_order=False)
+
+        df_scan = client.scan_table(
+            catalog=default_catalog, schema=default_schema, name=table_name
+        )
+        assert_frame_equal(pl.LazyFrame(df), df_scan, check_row_order=False)
