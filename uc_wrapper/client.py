@@ -240,8 +240,8 @@ class UCClient:
         catalog: str,
         schema: str,
         name: str,
-        mode: WriteMode | None,
-        schema_evolution: SchemaEvolution | None,
+        mode: WriteMode = WriteMode.APPEND,
+        schema_evolution: SchemaEvolution = SchemaEvolution.STRICT,
     ) -> None:
         """
         Writes the Polars DataFrame `df` to the Unity Catalog table

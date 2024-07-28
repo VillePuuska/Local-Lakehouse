@@ -207,8 +207,8 @@ def scan_table(table: Table) -> pl.LazyFrame:
 def write_table(
     table: Table,
     df: pl.DataFrame,
-    mode: WriteMode = WriteMode.APPEND,
-    schema_evolution: SchemaEvolution = SchemaEvolution.STRICT,
+    mode: WriteMode,
+    schema_evolution: SchemaEvolution,
 ) -> list[Column] | None:
     """
     Writes the Polars DataFrame `df` to the location of `table`.
