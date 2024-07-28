@@ -259,14 +259,24 @@ def write_table(
                 raise UnsupportedOperationError(
                     "Appending is only supported for PARQUET when partitioned."
                 )
-            raise NotImplementedError
+            df_uc_schema = df_schema_to_uc_schema(df=df)
+            if not check_schema_equality(left=df_uc_schema, right=table.columns):
+                raise SchemaMismatchError(
+                    f"Schema evolution is set to strict but schemas do not match: {df_uc_schema} VS {table.columns}"
+                )
+            df.write_parquet(
+                file=path,
+                use_pyarrow=True,
+                pyarrow_options={
+                    "partition_cols": [col.name for col in partition_cols]
+                },
+            )
+            return None
 
         case WriteMode.APPEND, FileType.PARQUET, SchemaEvolution.UNION:
-            partition_cols = get_partition_columns(table.columns)
-            if len(partition_cols) == 0:
-                raise UnsupportedOperationError(
-                    "Appending is only supported for PARQUET when partitioned."
-                )
+            raise NotImplementedError
+
+        case WriteMode.APPEND, FileType.PARQUET, SchemaEvolution.OVERWRITE:
             raise NotImplementedError
 
         case WriteMode.APPEND, _, _:
