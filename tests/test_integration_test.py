@@ -527,16 +527,12 @@ def test_basic_dataframe_operations(
         match filetype:
             case FileType.DELTA:
                 filepath = tmpdir
-                df.write_delta(target=tmpdir, mode="error")
             case FileType.PARQUET:
                 filepath = os.path.join(tmpdir, table_name + ".parquet")
-                df.write_parquet(file=filepath)
             case FileType.CSV:
                 filepath = os.path.join(tmpdir, table_name + ".csv")
-                df.write_csv(file=filepath, include_header=True)
             case FileType.AVRO:
                 filepath = os.path.join(tmpdir, table_name + ".avro")
-                df.write_avro(file=filepath)
             case _:
                 raise NotImplementedError
         columns = [
@@ -575,6 +571,15 @@ def test_basic_dataframe_operations(
                 columns=columns,
                 storage_location=filepath,
             )
+        )
+
+        client.write_table(
+            df,
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name,
+            mode=WriteMode.OVERWRITE,
+            schema_evolution=SchemaEvolution.STRICT,
         )
 
         # Test read_table and scan_table
@@ -669,18 +674,8 @@ def test_partitioned_dataframe_operations(
         match filetype:
             case FileType.DELTA:
                 filepath = tmpdir
-                df.write_delta(
-                    target=tmpdir,
-                    mode="error",
-                    delta_write_options={"partition_by": ["part1", "part2"]},
-                )
             case FileType.PARQUET:
                 filepath = tmpdir
-                df.write_parquet(
-                    file=filepath,
-                    use_pyarrow=True,
-                    pyarrow_options={"partition_cols": ["part1", "part2"]},
-                )
             case _:
                 raise NotImplementedError
         columns = [
@@ -735,6 +730,16 @@ def test_partitioned_dataframe_operations(
             )
         )
 
+        client.write_table(
+            df,
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name,
+            mode=WriteMode.OVERWRITE,
+            schema_evolution=SchemaEvolution.STRICT,
+        )
+
+        # Test read and scan
         df_read = client.read_table(
             catalog=default_catalog, schema=default_schema, name=table_name
         )
