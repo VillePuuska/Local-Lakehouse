@@ -3,6 +3,7 @@ import os
 import time
 import uuid
 from enum import Enum
+from typing import Literal, cast
 from .exceptions import UnsupportedOperationError, SchemaMismatchError
 from .models import Table, FileType, Column, DataType
 
@@ -206,8 +207,8 @@ def scan_table(table: Table) -> pl.LazyFrame:
 def write_table(
     table: Table,
     df: pl.DataFrame,
-    mode: WriteMode | None = WriteMode.APPEND,
-    schema_evolution: SchemaEvolution | None = SchemaEvolution.STRICT,
+    mode: WriteMode = WriteMode.APPEND,
+    schema_evolution: SchemaEvolution = SchemaEvolution.STRICT,
 ) -> list[Column] | None:
     """
     Writes the Polars DataFrame `df` to the location of `table`.
@@ -230,29 +231,31 @@ def write_table(
         raise UnsupportedOperationError("Only local storage is supported.")
     path = path.removeprefix("file://")
     match mode, table.file_type, schema_evolution:
-        case WriteMode.APPEND, FileType.DELTA, SchemaEvolution.STRICT:
+        case _, FileType.DELTA, SchemaEvolution.STRICT:
             df_uc_schema = df_schema_to_uc_schema(df=df)
             if not check_schema_equality(left=df_uc_schema, right=table.columns):
                 raise SchemaMismatchError(
                     f"Schema evolution is set to strict but schemas do not match: {df_uc_schema} VS {table.columns}"
                 )
             partition_cols = get_partition_columns(table.columns)
+            # needing to do this cast is not great, but mypy gets angry if we just pass this as a str to write_delta
+            write_mode = cast(Literal["append", "overwrite"], mode.value.lower())
             if len(partition_cols) > 0:
                 df.write_delta(
                     target=path,
-                    mode="append",
+                    mode=write_mode,
                     delta_write_options={
                         "partition_by": [col.name for col in partition_cols]
                     },
                 )
             else:
-                df.write_delta(target=path, mode="append")
+                df.write_delta(target=path, mode=write_mode)
             return None
 
-        case WriteMode.APPEND, FileType.DELTA, SchemaEvolution.UNION:
+        case _, FileType.DELTA, SchemaEvolution.UNION:
             raise NotImplementedError
 
-        case WriteMode.APPEND, FileType.DELTA, SchemaEvolution.OVERWRITE:
+        case _, FileType.DELTA, SchemaEvolution.OVERWRITE:
             raise NotImplementedError
 
         case WriteMode.APPEND, FileType.PARQUET, SchemaEvolution.STRICT:
@@ -288,9 +291,6 @@ def write_table(
             raise UnsupportedOperationError(
                 f"Appending is not supported for {table.file_type.value}."
             )
-
-        case WriteMode.OVERWRITE, FileType.DELTA, _:
-            raise NotImplementedError
 
         case WriteMode.OVERWRITE, FileType.PARQUET, _:
             raise NotImplementedError

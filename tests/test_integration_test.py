@@ -622,6 +622,32 @@ def test_basic_dataframe_operations(
                     schema_evolution=SchemaEvolution.STRICT,
                 )
 
+        df4 = random_df()
+
+        # Test OVERWRITE writes; only DELTA for now
+        if filetype == FileType.DELTA:
+            client.write_table(
+                df4,
+                catalog=default_catalog,
+                schema=default_schema,
+                name=table_name,
+                mode=WriteMode.OVERWRITE,
+                schema_evolution=SchemaEvolution.STRICT,
+            )
+
+            assert_frame_equal(
+                df4,
+                client.read_table(
+                    catalog=default_catalog, schema=default_schema, name=table_name
+                ),
+                check_row_order=False,
+            )
+
+            df4_scan = client.scan_table(
+                catalog=default_catalog, schema=default_schema, name=table_name
+            )
+            assert_frame_equal(pl.LazyFrame(df4), df4_scan, check_row_order=False)
+
 
 @pytest.mark.parametrize(
     "df,filetype",
