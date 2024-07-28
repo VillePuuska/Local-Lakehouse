@@ -114,8 +114,6 @@ def check_schema_equality(left: list[Column], right: list[Column]) -> bool:
             return False
         if left_col.data_type != right_col.data_type:
             return False
-        if left_col.partition_index != right_col.partition_index:
-            return False
     return True
 
 
@@ -236,7 +234,17 @@ def write_table(
                 raise SchemaMismatchError(
                     f"Schema evolution is set to strict but schemas do not match: {df_uc_schema} VS {table.columns}"
                 )
-            df.write_delta(target=path, mode="append")
+            partition_cols = get_partition_columns(table.columns)
+            if len(partition_cols) > 0:
+                df.write_delta(
+                    target=path,
+                    mode="append",
+                    delta_write_options={
+                        "partition_by": [col.name for col in partition_cols]
+                    },
+                )
+            else:
+                df.write_delta(target=path, mode="append")
             return None
 
         case WriteMode.APPEND, FileType.DELTA, SchemaEvolution.UNION:
@@ -245,7 +253,23 @@ def write_table(
         case WriteMode.APPEND, FileType.DELTA, SchemaEvolution.OVERWRITE:
             raise NotImplementedError
 
-        case WriteMode.APPEND, _:
+        case WriteMode.APPEND, FileType.PARQUET, SchemaEvolution.STRICT:
+            partition_cols = get_partition_columns(table.columns)
+            if len(partition_cols) == 0:
+                raise UnsupportedOperationError(
+                    "Appending is only supported for PARQUET when partitioned."
+                )
+            raise NotImplementedError
+
+        case WriteMode.APPEND, FileType.PARQUET, SchemaEvolution.UNION:
+            partition_cols = get_partition_columns(table.columns)
+            if len(partition_cols) == 0:
+                raise UnsupportedOperationError(
+                    "Appending is only supported for PARQUET when partitioned."
+                )
+            raise NotImplementedError
+
+        case WriteMode.APPEND, _, _:
             raise UnsupportedOperationError(
                 f"Appending is not supported for {table.file_type.value}."
             )
