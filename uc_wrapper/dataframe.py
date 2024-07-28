@@ -1,5 +1,7 @@
 import polars as pl
 import os
+import time
+import uuid
 from enum import Enum
 from .exceptions import UnsupportedOperationError, SchemaMismatchError
 from .models import Table, FileType, Column, DataType
@@ -268,7 +270,10 @@ def write_table(
                 file=path,
                 use_pyarrow=True,
                 pyarrow_options={
-                    "partition_cols": [col.name for col in partition_cols]
+                    "partition_cols": [col.name for col in partition_cols],
+                    "basename_template": str(uuid.uuid4())
+                    + str(time.time()).replace(".", "")
+                    + "-{i}.parquet",
                 },
             )
             return None
