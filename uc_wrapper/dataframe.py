@@ -57,6 +57,20 @@ def polars_type_to_uc_type(t: pl.PolarsDataType) -> DataType:
             raise UnsupportedOperationError(f"Unsupported datatype: {t}")
 
 
+def df_schema_to_uc_schema(df: pl.DataFrame | pl.LazyFrame) -> list[Column]:
+    res = []
+    for i, (col_name, col_type) in enumerate(df.schema.items()):
+        res.append(
+            Column(
+                name=col_name,
+                data_type=polars_type_to_uc_type(col_type),
+                position=i,
+                nullable=True,
+            )
+        )
+    return res
+
+
 def uc_type_to_polars_type(t: DataType) -> pl.PolarsDataType:
     match t:
         case DataType.BOOLEAN:
@@ -95,18 +109,8 @@ def uc_type_to_polars_type(t: DataType) -> pl.PolarsDataType:
             raise UnsupportedOperationError(f"Unsupported datatype: {t.value}")
 
 
-def df_schema_to_uc_schema(df: pl.DataFrame | pl.LazyFrame) -> list[Column]:
-    res = []
-    for i, (col_name, col_type) in enumerate(df.schema.items()):
-        res.append(
-            Column(
-                name=col_name,
-                data_type=polars_type_to_uc_type(col_type),
-                position=i,
-                nullable=True,
-            )
-        )
-    return res
+def uc_schema_to_df_schema(cols: list[Column]) -> dict[str, pl.PolarsDataType]:
+    return {col.name: uc_type_to_polars_type(col.data_type) for col in cols}
 
 
 def check_schema_equality(left: list[Column], right: list[Column]) -> bool:
@@ -155,7 +159,8 @@ def read_table(table: Table) -> pl.DataFrame:
                 )
 
         case FileType.CSV:
-            df = pl.read_csv(source=path)
+            pl_schema = uc_schema_to_df_schema(table.columns)
+            df = pl.read_csv(source=path, schema=pl_schema)
 
         case FileType.AVRO:
             df = pl.read_avro(source=path)
@@ -193,7 +198,8 @@ def scan_table(table: Table) -> pl.LazyFrame:
                 )
 
         case FileType.CSV:
-            df = pl.scan_csv(source=path)
+            pl_schema = uc_schema_to_df_schema(table.columns)
+            df = pl.scan_csv(source=path, schema=pl_schema)
 
         case FileType.AVRO:
             raise UnsupportedOperationError("scan is not supported for Avro.")
