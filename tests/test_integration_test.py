@@ -33,6 +33,8 @@ from uc_wrapper import (
 USE_EXISTING_IMAGE_ENV_VAR = "UC_TEST_USE_IMAGE"
 IMAGE_NAME_ENV_VAR = "UC_TEST_IMAGE_TAG"
 
+RANDOM_DF_ROWS = 10
+
 
 @pytest.fixture(scope="module")
 def image() -> Generator[str, None, None]:
@@ -442,15 +444,14 @@ def test_tables_endpoint_integration(client: UCClient):
 
 
 def random_df() -> pl.DataFrame:
-    rows = 10
-    uuids = [str(uuid.uuid4()) for _ in range(rows)]
-    ints = [random.randint(0, 10000) for _ in range(rows)]
-    floats = [random.uniform(0, 10000) for _ in range(rows)]
+    uuids = [str(uuid.uuid4()) for _ in range(RANDOM_DF_ROWS)]
+    ints = [random.randint(0, 10000) for _ in range(RANDOM_DF_ROWS)]
+    floats = [random.uniform(0, 10000) for _ in range(RANDOM_DF_ROWS)]
     strings = [
         "".join(
             random.choices(population=string.ascii_letters, k=random.randint(2, 256))
         )
-        for _ in range(rows)
+        for _ in range(RANDOM_DF_ROWS)
     ]
     return pl.DataFrame(
         {
@@ -479,15 +480,14 @@ def random_partitioned_df() -> pl.DataFrame:
 
 
 def random_lf() -> pl.LazyFrame:
-    rows = 10
-    uuids = [str(uuid.uuid4()) for _ in range(rows)]
-    ints = [random.randint(0, 10000) for _ in range(rows)]
-    floats = [random.uniform(0, 10000) for _ in range(rows)]
+    uuids = [str(uuid.uuid4()) for _ in range(RANDOM_DF_ROWS)]
+    ints = [random.randint(0, 10000) for _ in range(RANDOM_DF_ROWS)]
+    floats = [random.uniform(0, 10000) for _ in range(RANDOM_DF_ROWS)]
     strings = [
         "".join(
             random.choices(population=string.ascii_letters, k=random.randint(2, 256))
         )
-        for _ in range(rows)
+        for _ in range(RANDOM_DF_ROWS)
     ]
     return pl.LazyFrame(
         {
@@ -624,25 +624,25 @@ def test_basic_dataframe_operations(
 
         df4 = random_df()
 
-        # Test OVERWRITE writes; only DELTA for now
-        if filetype == FileType.DELTA:
-            client.write_table(
-                df4,
-                catalog=default_catalog,
-                schema=default_schema,
-                name=table_name,
-                mode=WriteMode.OVERWRITE,
-                schema_evolution=SchemaEvolution.STRICT,
-            )
+        # Test OVERWRITE writes
+        client.write_table(
+            df4,
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name,
+            mode=WriteMode.OVERWRITE,
+            schema_evolution=SchemaEvolution.STRICT,
+        )
 
-            assert_frame_equal(
-                df4,
-                client.read_table(
-                    catalog=default_catalog, schema=default_schema, name=table_name
-                ),
-                check_row_order=False,
-            )
+        assert_frame_equal(
+            df4,
+            client.read_table(
+                catalog=default_catalog, schema=default_schema, name=table_name
+            ),
+            check_row_order=False,
+        )
 
+        if filetype != FileType.AVRO:
             df4_scan = client.scan_table(
                 catalog=default_catalog, schema=default_schema, name=table_name
             )
@@ -786,3 +786,34 @@ def test_partitioned_dataframe_operations(
                 mode=WriteMode.APPEND,
                 schema_evolution=SchemaEvolution.STRICT,
             )
+
+        df4 = pl.concat([random_partitioned_df(), random_partitioned_df()])
+        # This rewriting of part1 and part2 guarantees that we will overwrite
+        # every partition. Otherwise, we might not overwrite all data
+        # in the case of a partitioned Parquet table.
+        df_concat = pl.concat([df, df2])
+        df4 = df4.replace_column(4, df_concat.select("part1").to_series())
+        df4 = df4.replace_column(5, df_concat.select("part2").to_series())
+
+        # Test OVERWRITE writes
+        client.write_table(
+            df4,
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name,
+            mode=WriteMode.OVERWRITE,
+            schema_evolution=SchemaEvolution.STRICT,
+        )
+
+        assert_frame_equal(
+            df4,
+            client.read_table(
+                catalog=default_catalog, schema=default_schema, name=table_name
+            ),
+            check_row_order=False,
+        )
+
+        df4_scan = client.scan_table(
+            catalog=default_catalog, schema=default_schema, name=table_name
+        )
+        assert_frame_equal(pl.LazyFrame(df4), df4_scan, check_row_order=False)

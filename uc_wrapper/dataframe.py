@@ -124,6 +124,16 @@ def check_schema_equality(left: list[Column], right: list[Column]) -> bool:
     return True
 
 
+def raise_for_schema_mismatch(
+    df: pl.DataFrame | pl.LazyFrame, uc: list[Column]
+) -> None:
+    df_uc_schema = df_schema_to_uc_schema(df=df)
+    if not check_schema_equality(left=df_uc_schema, right=uc):
+        raise SchemaMismatchError(
+            f"Schema evolution is set to strict but schemas do not match: {df_uc_schema} VS {uc}"
+        )
+
+
 def get_partition_columns(cols: list[Column]) -> list[Column]:
     partition_cols = [col for col in cols if col.partition_index is not None]
     # mypy doesn't understand that the type of x.partition_index is int in the following lambda
@@ -238,11 +248,7 @@ def write_table(
     path = path.removeprefix("file://")
     match mode, table.file_type, schema_evolution:
         case _, FileType.DELTA, SchemaEvolution.STRICT:
-            df_uc_schema = df_schema_to_uc_schema(df=df)
-            if not check_schema_equality(left=df_uc_schema, right=table.columns):
-                raise SchemaMismatchError(
-                    f"Schema evolution is set to strict but schemas do not match: {df_uc_schema} VS {table.columns}"
-                )
+            raise_for_schema_mismatch(df=df, uc=table.columns)
             partition_cols = get_partition_columns(table.columns)
             # needing to do this cast is not great, but mypy gets angry if we just pass this as a str to write_delta
             write_mode = cast(Literal["append", "overwrite"], mode.value.lower())
@@ -270,11 +276,7 @@ def write_table(
                 raise UnsupportedOperationError(
                     "Appending is only supported for PARQUET when partitioned."
                 )
-            df_uc_schema = df_schema_to_uc_schema(df=df)
-            if not check_schema_equality(left=df_uc_schema, right=table.columns):
-                raise SchemaMismatchError(
-                    f"Schema evolution is set to strict but schemas do not match: {df_uc_schema} VS {table.columns}"
-                )
+            raise_for_schema_mismatch(df=df, uc=table.columns)
             df.write_parquet(
                 file=path,
                 use_pyarrow=True,
@@ -297,6 +299,35 @@ def write_table(
             raise UnsupportedOperationError(
                 f"Appending is not supported for {table.file_type.value}."
             )
+
+        case WriteMode.OVERWRITE, FileType.PARQUET, SchemaEvolution.STRICT:
+            raise_for_schema_mismatch(df=df, uc=table.columns)
+            partition_cols = get_partition_columns(table.columns)
+            if len(partition_cols) > 0:
+                df.write_parquet(
+                    file=path,
+                    use_pyarrow=True,
+                    pyarrow_options={
+                        "partition_cols": [col.name for col in partition_cols],
+                        "basename_template": str(uuid.uuid4())
+                        + str(time.time()).replace(".", "")
+                        + "-{i}.parquet",
+                        "existing_data_behavior": "delete_matching",
+                    },
+                )
+            else:
+                df.write_parquet(file=path)
+            return None
+
+        case WriteMode.OVERWRITE, FileType.CSV, SchemaEvolution.STRICT:
+            raise_for_schema_mismatch(df=df, uc=table.columns)
+            df.write_csv(file=path)
+            return None
+
+        case WriteMode.OVERWRITE, FileType.AVRO, SchemaEvolution.STRICT:
+            raise_for_schema_mismatch(df=df, uc=table.columns)
+            df.write_avro(file=path)
+            return None
 
         case WriteMode.OVERWRITE, FileType.PARQUET, _:
             raise NotImplementedError

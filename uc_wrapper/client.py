@@ -250,6 +250,9 @@ class UCClient:
         `mode` specifies the writing mode:
             - WriteMode.APPEND to append to the existing table, IF it exists.
             - WriteMode.OVERWRITE replaces/overwrites the existing table, IF it exists.
+                - For single file Parquet, CSV, AVRO: overwrites the file.
+                - For partitioned Parquet: overwrites the common partitions; DOES NOT ALWAYS OVERWRITE EVERYTHING.
+                - For Delta, overwrites everything.
 
         `schema_evolution` specifies how to handle possible schema mismatches:
             - SchemaEvolution.STRICT raises an Exception if there is a difference in schemas.
