@@ -19,7 +19,7 @@ class SchemaEvolution(str, Enum):
     OVERWRITE = "OVERWRITE"
 
 
-def polars_type_to_uc_type(t: pl.PolarsDataType) -> DataType:
+def polars_type_to_uc_type(t: pl.DataType) -> DataType:
     match t:
         case pl.Decimal:
             return DataType.DECIMAL
@@ -55,6 +55,8 @@ def polars_type_to_uc_type(t: pl.PolarsDataType) -> DataType:
             return DataType.NULL
         case _:
             raise UnsupportedOperationError(f"Unsupported datatype: {t}")
+    # Why did mypy start complaining about missing return here after bumping Polars to 1.3.0?
+    return DataType.NULL
 
 
 def df_schema_to_uc_schema(df: pl.DataFrame | pl.LazyFrame) -> list[Column]:
@@ -71,45 +73,45 @@ def df_schema_to_uc_schema(df: pl.DataFrame | pl.LazyFrame) -> list[Column]:
     return res
 
 
-def uc_type_to_polars_type(t: DataType) -> pl.PolarsDataType:
+def uc_type_to_polars_type(t: DataType) -> pl.DataType:
     match t:
         case DataType.BOOLEAN:
-            return pl.Boolean
+            return cast(pl.DataType, pl.Boolean)
         case DataType.BYTE:
-            return pl.Int8
+            return cast(pl.DataType, pl.Int8)
         case DataType.SHORT:
-            return pl.Int16
+            return cast(pl.DataType, pl.Int16)
         case DataType.INT:
-            return pl.Int32
+            return cast(pl.DataType, pl.Int32)
         case DataType.LONG:
-            return pl.Int64
+            return cast(pl.DataType, pl.Int64)
         case DataType.FLOAT:
-            return pl.Float32
+            return cast(pl.DataType, pl.Float32)
         case DataType.DOUBLE:
-            return pl.Float64
+            return cast(pl.DataType, pl.Float64)
         case DataType.DATE:
-            return pl.Date
+            return cast(pl.DataType, pl.Date)
         case DataType.TIMESTAMP:
-            return pl.Datetime
+            return cast(pl.DataType, pl.Datetime)
         case DataType.STRING:
-            return pl.String
+            return cast(pl.DataType, pl.String)
         case DataType.BINARY:
-            return pl.Binary
+            return cast(pl.DataType, pl.Binary)
         case DataType.DECIMAL:
-            return pl.Decimal
+            return cast(pl.DataType, pl.Decimal)
         case DataType.ARRAY:
-            return pl.Array
+            return cast(pl.DataType, pl.Array)
         case DataType.STRUCT:
-            return pl.Struct
+            return cast(pl.DataType, pl.Struct)
         case DataType.CHAR:
-            return pl.String
+            return cast(pl.DataType, pl.String)
         case DataType.NULL:
-            return pl.Null
+            return cast(pl.DataType, pl.Null)
         case _:
             raise UnsupportedOperationError(f"Unsupported datatype: {t.value}")
 
 
-def uc_schema_to_df_schema(cols: list[Column]) -> dict[str, pl.PolarsDataType]:
+def uc_schema_to_df_schema(cols: list[Column]) -> dict[str, pl.DataType]:
     return {col.name: uc_type_to_polars_type(col.data_type) for col in cols}
 
 
@@ -162,6 +164,7 @@ def read_table(table: Table) -> pl.DataFrame:
                     source=os.path.join(
                         path, *["**" for _ in range(len(partition_cols))], "*.parquet"
                     ),
+                    hive_partitioning=True,
                     hive_schema={
                         col.name: uc_type_to_polars_type(col.data_type)
                         for col in partition_cols
@@ -201,6 +204,7 @@ def scan_table(table: Table) -> pl.LazyFrame:
                     source=os.path.join(
                         path, *["**" for _ in range(len(partition_cols))], "*.parquet"
                     ),
+                    hive_partitioning=True,
                     hive_schema={
                         col.name: uc_type_to_polars_type(col.data_type)
                         for col in partition_cols

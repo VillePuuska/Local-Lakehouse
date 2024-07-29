@@ -775,6 +775,7 @@ def test_partitioned_dataframe_operations(
                 pl.concat([df, df2]),
                 pl.read_parquet(
                     source=os.path.join(filepath, "**", "**", "*.parquet"),
+                    hive_partitioning=True,
                     hive_schema={"part1": pl.Int64, "part2": pl.Int64},
                 ),
                 check_row_order=False,
