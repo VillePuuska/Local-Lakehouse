@@ -307,6 +307,10 @@ class UCClient:
             )
         cols = df_schema_to_uc_schema(df=df)
         if partition_cols is not None:
+            if file_type not in (FileType.DELTA, FileType.PARQUET):
+                raise UnsupportedOperationError(
+                    "Partitioned tables only supported for DELTA and PARQUET."
+                )
             for i, col in enumerate(cols):
                 if col.name not in partition_cols:
                     continue
@@ -325,4 +329,48 @@ class UCClient:
         self.write_table(
             df=df, catalog=catalog, schema=schema, name=name, mode=WriteMode.OVERWRITE
         )
+        return table
+
+    def register_as_table(
+        self,
+        filepath: str,
+        catalog: str,
+        schema: str,
+        name: str,
+        file_type: FileType,
+        partition_cols: list[str] | None = None,
+    ) -> Table:
+        """
+        Creates a new table to Unity Catalog from a table/file at `filepath`.
+        Raises an AlreadyExistsError if the table alredy exists.
+        """
+        if not filepath.startswith("file://"):
+            if not filepath.startswith("/"):
+                raise UnsupportedOperationError(
+                    "Filepath must be absolute, e.g. file:///home/me/ex-delta-table or simply /home/me/ex-delta-table"
+                )
+            filepath = "file://" + filepath
+        table = Table(
+            name=name,
+            catalog_name=catalog,
+            schema_name=schema,
+            table_type=TableType.EXTERNAL,
+            file_type=file_type,
+            columns=[],
+            storage_location=filepath,
+        )
+        df = read_table(table=table)
+        cols = df_schema_to_uc_schema(df=df)
+        if partition_cols is not None:
+            if file_type not in (FileType.DELTA, FileType.PARQUET):
+                raise UnsupportedOperationError(
+                    "Partitioned tables only supported for DELTA and PARQUET."
+                )
+            for i, col in enumerate(cols):
+                if col.name not in partition_cols:
+                    continue
+                partition_ind = partition_cols.index(col.name)
+                cols[i].partition_index = partition_ind
+        table.columns = cols
+        table = self.create_table(table=table)
         return table

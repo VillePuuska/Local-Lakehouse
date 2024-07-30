@@ -537,3 +537,186 @@ def test_create_as_table(client: UCClient, file_type: FileType, partitioned: boo
             catalog=default_catalog, schema=default_schema, name=table_name
         )
         assert_frame_equal(df, df_read, check_row_order=False)
+
+
+def test_register_as_table(client: UCClient):
+    assert client.health_check()
+
+    default_catalog = "unity"
+    default_schema = "default"
+    table_name = "test_table"
+
+    # Non-partitioned delta
+    with tempfile.TemporaryDirectory() as tmpdir:
+        df = random_df()
+        df.write_delta(target=tmpdir)
+
+        client.register_as_table(
+            filepath=tmpdir,
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name + "np-delta",
+            file_type=FileType.DELTA,
+        )
+        table = client.get_table(
+            catalog=default_catalog,
+            schema=default_schema,
+            table=table_name + "np-delta",
+        )
+        assert (
+            len([col for col in table.columns if col.partition_index is not None]) == 0
+        )
+
+        df_read = client.read_table(
+            catalog=default_catalog, schema=default_schema, name=table_name + "np-delta"
+        )
+        assert_frame_equal(df, df_read, check_row_order=False)
+
+    # Partitioned delta
+    with tempfile.TemporaryDirectory() as tmpdir:
+        df = random_partitioned_df()
+        df.write_delta(
+            target=tmpdir, delta_write_options={"partition_by": ["part1", "part2"]}
+        )
+
+        client.register_as_table(
+            filepath=tmpdir,
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name + "p-delta",
+            file_type=FileType.DELTA,
+            partition_cols=["part1", "part2"],
+        )
+        table = client.get_table(
+            catalog=default_catalog, schema=default_schema, table=table_name + "p-delta"
+        )
+        assert (
+            len([col for col in table.columns if col.partition_index is not None]) == 2
+        )
+
+        df_read = client.read_table(
+            catalog=default_catalog, schema=default_schema, name=table_name + "p-delta"
+        )
+        assert_frame_equal(df, df_read, check_row_order=False)
+
+    # Non-partitioned parquet
+    with tempfile.TemporaryDirectory() as tmpdir:
+        filepath = os.path.join(tmpdir, "safvlsdv.parquet")
+        df = random_df()
+        df.write_parquet(file=filepath)
+
+        client.register_as_table(
+            filepath=filepath,
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name + "np-parquet",
+            file_type=FileType.PARQUET,
+        )
+        table = client.get_table(
+            catalog=default_catalog,
+            schema=default_schema,
+            table=table_name + "np-parquet",
+        )
+        assert (
+            len([col for col in table.columns if col.partition_index is not None]) == 0
+        )
+
+        df_read = client.read_table(
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name + "np-parquet",
+        )
+        assert_frame_equal(df, df_read, check_row_order=False)
+
+    # Partitioned delta
+    with tempfile.TemporaryDirectory() as tmpdir:
+        df = random_partitioned_df()
+        df.write_parquet(
+            file=tmpdir,
+            use_pyarrow=True,
+            pyarrow_options={
+                "partition_cols": ["part1", "part2"],
+            },
+        )
+
+        client.register_as_table(
+            filepath=tmpdir,
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name + "p-parquet",
+            file_type=FileType.PARQUET,
+            partition_cols=["part1", "part2"],
+        )
+        table = client.get_table(
+            catalog=default_catalog,
+            schema=default_schema,
+            table=table_name + "p-parquet",
+        )
+        assert (
+            len([col for col in table.columns if col.partition_index is not None]) == 2
+        )
+
+        df_read = client.read_table(
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name + "p-parquet",
+        )
+        assert_frame_equal(df, df_read, check_row_order=False)
+
+    # CSV
+    with tempfile.TemporaryDirectory() as tmpdir:
+        filepath = os.path.join(tmpdir, "sgvsavdavsdsvd.csv")
+        df = random_df()
+        df.write_csv(file=filepath)
+
+        client.register_as_table(
+            filepath=filepath,
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name + "csv",
+            file_type=FileType.CSV,
+        )
+        table = client.get_table(
+            catalog=default_catalog,
+            schema=default_schema,
+            table=table_name + "csv",
+        )
+        assert (
+            len([col for col in table.columns if col.partition_index is not None]) == 0
+        )
+
+        df_read = client.read_table(
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name + "csv",
+        )
+        assert_frame_equal(df, df_read, check_row_order=False)
+
+    # AVRO
+    with tempfile.TemporaryDirectory() as tmpdir:
+        filepath = os.path.join(tmpdir, "iuaevbaerv.avro")
+        df = random_df()
+        df.write_avro(file=filepath)
+
+        client.register_as_table(
+            filepath=filepath,
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name + "avro",
+            file_type=FileType.AVRO,
+        )
+        table = client.get_table(
+            catalog=default_catalog,
+            schema=default_schema,
+            table=table_name + "avro",
+        )
+        assert (
+            len([col for col in table.columns if col.partition_index is not None]) == 0
+        )
+
+        df_read = client.read_table(
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name + "avro",
+        )
+        assert_frame_equal(df, df_read, check_row_order=False)

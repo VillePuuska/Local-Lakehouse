@@ -173,7 +173,10 @@ def read_table(table: Table) -> pl.DataFrame:
 
         case FileType.CSV:
             pl_schema = uc_schema_to_df_schema(table.columns)
-            df = pl.read_csv(source=path, schema=pl_schema)
+            if len(pl_schema) == 0:
+                df = pl.read_csv(source=path)
+            else:
+                df = pl.read_csv(source=path, schema=pl_schema)
 
         case FileType.AVRO:
             df = pl.read_avro(source=path)
@@ -213,7 +216,10 @@ def scan_table(table: Table) -> pl.LazyFrame:
 
         case FileType.CSV:
             pl_schema = uc_schema_to_df_schema(table.columns)
-            df = pl.scan_csv(source=path, schema=pl_schema)
+            if len(pl_schema) == 0:
+                df = pl.scan_csv(source=path)
+            else:
+                df = pl.scan_csv(source=path, schema=pl_schema)
 
         case FileType.AVRO:
             raise UnsupportedOperationError("scan is not supported for Avro.")
