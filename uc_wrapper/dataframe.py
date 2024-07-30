@@ -250,6 +250,8 @@ def write_table(
     if not path.startswith("file://"):
         raise UnsupportedOperationError("Only local storage is supported.")
     path = path.removeprefix("file://")
+
+    # TODO: for the love of god NEVER let a match-case devolve like this again
     match mode, table.file_type, schema_evolution:
         case _, FileType.DELTA, SchemaEvolution.STRICT:
             raise_for_schema_mismatch(df=df, uc=table.columns)
@@ -271,8 +273,35 @@ def write_table(
         case _, FileType.DELTA, SchemaEvolution.UNION:
             raise NotImplementedError
 
+        case WriteMode.OVERWRITE, FileType.DELTA, SchemaEvolution.OVERWRITE:
+            partition_cols = get_partition_columns(table.columns)
+            # needing to do this cast is not great, but mypy gets angry if we just pass this as a str to write_delta
+            write_mode = cast(Literal["append", "overwrite"], mode.value.lower())
+            if len(partition_cols) > 0:
+                df.write_delta(
+                    target=path,
+                    mode=write_mode,
+                    delta_write_options={
+                        "partition_by": [col.name for col in partition_cols],
+                        "schema_mode": "overwrite",
+                    },
+                )
+            else:
+                df.write_delta(
+                    target=path,
+                    mode=write_mode,
+                    delta_write_options={"schema_mode": "overwrite"},
+                )
+            try:
+                raise_for_schema_mismatch(df=df, uc=table.columns)
+                return None
+            except SchemaMismatchError:
+                return df_schema_to_uc_schema(df=df)
+
         case _, FileType.DELTA, SchemaEvolution.OVERWRITE:
-            raise NotImplementedError
+            raise UnsupportedOperationError(
+                "Schema evolution OVERWRITE is only supported when write mode is also OVERWRITE."
+            )
 
         case WriteMode.APPEND, FileType.PARQUET, SchemaEvolution.STRICT:
             partition_cols = get_partition_columns(table.columns)
@@ -297,7 +326,9 @@ def write_table(
             raise NotImplementedError
 
         case WriteMode.APPEND, FileType.PARQUET, SchemaEvolution.OVERWRITE:
-            raise NotImplementedError
+            raise UnsupportedOperationError(
+                "Schema evolution OVERWRITE is only supported when write mode is also OVERWRITE."
+            )
 
         case WriteMode.APPEND, _, _:
             raise UnsupportedOperationError(
@@ -333,14 +364,48 @@ def write_table(
             df.write_avro(file=path)
             return None
 
-        case WriteMode.OVERWRITE, FileType.PARQUET, _:
-            raise NotImplementedError
+        case WriteMode.OVERWRITE, FileType.PARQUET, SchemaEvolution.OVERWRITE:
+            partition_cols = get_partition_columns(table.columns)
+            if len(partition_cols) > 0:
+                df.write_parquet(
+                    file=path,
+                    use_pyarrow=True,
+                    pyarrow_options={
+                        "partition_cols": [col.name for col in partition_cols],
+                        "basename_template": str(uuid.uuid4())
+                        + str(time.time()).replace(".", "")
+                        + "-{i}.parquet",
+                        "existing_data_behavior": "delete_matching",
+                    },
+                )
+            else:
+                df.write_parquet(file=path)
+            try:
+                raise_for_schema_mismatch(df=df, uc=table.columns)
+                return None
+            except SchemaMismatchError:
+                return df_schema_to_uc_schema(df=df)
 
-        case WriteMode.OVERWRITE, FileType.CSV, _:
-            raise NotImplementedError
+        case WriteMode.OVERWRITE, FileType.CSV, SchemaEvolution.OVERWRITE:
+            df.write_csv(file=path)
+            try:
+                raise_for_schema_mismatch(df=df, uc=table.columns)
+                return None
+            except SchemaMismatchError:
+                return df_schema_to_uc_schema(df=df)
 
-        case WriteMode.OVERWRITE, FileType.AVRO, _:
-            raise NotImplementedError
+        case WriteMode.OVERWRITE, FileType.AVRO, SchemaEvolution.OVERWRITE:
+            df.write_avro(file=path)
+            try:
+                raise_for_schema_mismatch(df=df, uc=table.columns)
+                return None
+            except SchemaMismatchError:
+                return df_schema_to_uc_schema(df=df)
+
+        case _, _, SchemaEvolution.OVERWRITE:
+            raise UnsupportedOperationError(
+                "Schema evolution OVERWRITE is only supported when write mode is also OVERWRITE."
+            )
 
         case _:
             raise NotImplementedError

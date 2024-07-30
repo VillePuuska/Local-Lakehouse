@@ -18,6 +18,7 @@ from .uc_api_wrapper import (
     list_tables,
     update_catalog,
     update_schema,
+    DoesNotExistError,
 )
 
 
@@ -265,9 +266,12 @@ class UCClient:
             table=table, df=df, mode=mode, schema_evolution=schema_evolution
         )
         if new_columns is not None:
-            raise Exception(
-                "TODO: Columns need to be updated in the Unity Catalog but I'm too lazy to implement this today."
-            )
+            try:
+                self.delete_table(catalog=catalog, schema=schema, table=name)
+                table.columns = new_columns
+                self.create_table(table=table)
+            except Exception as e:
+                raise Exception("Something went horribly wrong.") from e
 
     def create_as_table(
         self,

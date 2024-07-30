@@ -207,6 +207,46 @@ def test_basic_dataframe_operations(client: UCClient, filetype: FileType):
             )
             assert_frame_equal(pl.LazyFrame(df4), df4_scan, check_row_order=False)
 
+        df5 = random_df()
+        df5 = df5.cast({"ints": pl.String})
+
+        table = client.get_table(
+            catalog=default_catalog, schema=default_schema, table=table_name
+        )
+        modified_col = [col for col in table.columns if col.name == "ints"][0]
+        assert modified_col.data_type == DataType.LONG
+        assert modified_col.position == 1
+
+        client.write_table(
+            df5,
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name,
+            mode=WriteMode.OVERWRITE,
+            schema_evolution=SchemaEvolution.OVERWRITE,
+        )
+
+        table = client.get_table(
+            catalog=default_catalog, schema=default_schema, table=table_name
+        )
+        modified_col = [col for col in table.columns if col.name == "ints"][0]
+        assert modified_col.data_type == DataType.STRING
+        assert modified_col.position == 1
+
+        assert_frame_equal(
+            df5,
+            client.read_table(
+                catalog=default_catalog, schema=default_schema, name=table_name
+            ),
+            check_row_order=False,
+        )
+
+        if filetype != FileType.AVRO:
+            df5_scan = client.scan_table(
+                catalog=default_catalog, schema=default_schema, name=table_name
+            )
+            assert_frame_equal(pl.LazyFrame(df5), df5_scan, check_row_order=False)
+
 
 @pytest.mark.parametrize(
     "filetype",
@@ -377,3 +417,44 @@ def test_partitioned_dataframe_operations(client: UCClient, filetype: FileType):
             catalog=default_catalog, schema=default_schema, name=table_name
         )
         assert_frame_equal(pl.LazyFrame(df4), df4_scan, check_row_order=False)
+
+        df5 = pl.concat([random_partitioned_df(), random_partitioned_df()])
+        df5 = df5.cast({"ints": pl.String})
+        df5 = df5.replace_column(4, df_concat.select("part1").to_series())
+        df5 = df5.replace_column(5, df_concat.select("part2").to_series())
+
+        table = client.get_table(
+            catalog=default_catalog, schema=default_schema, table=table_name
+        )
+        modified_col = [col for col in table.columns if col.name == "ints"][0]
+        assert modified_col.data_type == DataType.LONG
+        assert modified_col.position == 1
+
+        client.write_table(
+            df5,
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name,
+            mode=WriteMode.OVERWRITE,
+            schema_evolution=SchemaEvolution.OVERWRITE,
+        )
+
+        table = client.get_table(
+            catalog=default_catalog, schema=default_schema, table=table_name
+        )
+        modified_col = [col for col in table.columns if col.name == "ints"][0]
+        assert modified_col.data_type == DataType.STRING
+        assert modified_col.position == 1
+
+        assert_frame_equal(
+            df5,
+            client.read_table(
+                catalog=default_catalog, schema=default_schema, name=table_name
+            ),
+            check_row_order=False,
+        )
+
+        df5_scan = client.scan_table(
+            catalog=default_catalog, schema=default_schema, name=table_name
+        )
+        assert_frame_equal(pl.LazyFrame(df5), df5_scan, check_row_order=False)

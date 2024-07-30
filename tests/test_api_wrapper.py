@@ -1,5 +1,4 @@
 import tempfile
-from polars.testing import assert_frame_equal
 import tempfile
 import pytest
 from uc_wrapper import (
