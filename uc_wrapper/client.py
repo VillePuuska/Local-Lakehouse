@@ -1,7 +1,15 @@
 import requests
 import polars as pl
+from .exceptions import UnsupportedOperationError
 from .models import Catalog, Schema, Table, TableType, FileType
-from .dataframe import WriteMode, SchemaEvolution, read_table, scan_table, write_table
+from .dataframe import (
+    WriteMode,
+    SchemaEvolution,
+    read_table,
+    scan_table,
+    write_table,
+    df_schema_to_uc_schema,
+)
 from .uc_api_wrapper import (
     create_catalog,
     create_schema,
@@ -18,7 +26,6 @@ from .uc_api_wrapper import (
     list_tables,
     update_catalog,
     update_schema,
-    DoesNotExistError,
 )
 
 
@@ -275,16 +282,47 @@ class UCClient:
 
     def create_as_table(
         self,
-        df: pl.DataFrame | pl.LazyFrame,
+        df: pl.DataFrame,
         catalog: str,
         schema: str,
         name: str,
-        filetype: FileType = FileType.DELTA,
-        type: TableType = TableType.MANAGED,
+        file_type: FileType = FileType.DELTA,
+        table_type: TableType = TableType.MANAGED,
         location: str | None = None,
+        partition_cols: list[str] | None = None,
     ) -> Table:
         """
-        Creates a new table to Unity Catalog with the schema of the Polars DataFrame or LazyFrame `df`
+        Creates a new table to Unity Catalog with the schema of the Polars DataFrame `df`
         and writes `df` to the new table. Raises an AlreadyExistsError if the table alredy exists.
         """
-        raise NotImplementedError
+        if table_type == TableType.MANAGED:
+            raise UnsupportedOperationError("MANAGED tables are not yet supported.")
+        if table_type == TableType.EXTERNAL and location is None:
+            raise UnsupportedOperationError(
+                "To create an EXTERNAL table, you must specify a location to store it in."
+            )
+        if not location.startswith("file://"):
+            raise UnsupportedOperationError(
+                "Only local storage is supported. Hint: location must be of the form file://<absolute_path>, e.g. file:///home/me/ex-delta-table"
+            )
+        cols = df_schema_to_uc_schema(df=df)
+        if partition_cols is not None:
+            for i, col in enumerate(cols):
+                if col.name not in partition_cols:
+                    continue
+                partition_ind = partition_cols.index(col.name)
+                cols[i].partition_index = partition_ind
+        table = Table(
+            name=name,
+            catalog_name=catalog,
+            schema_name=schema,
+            table_type=table_type,
+            file_type=file_type,
+            columns=cols,
+            storage_location=location,
+        )
+        table = self.create_table(table=table)
+        self.write_table(
+            df=df, catalog=catalog, schema=schema, name=name, mode=WriteMode.OVERWRITE
+        )
+        return table

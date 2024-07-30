@@ -1,7 +1,8 @@
 import os
 import tempfile
 import polars as pl
-from polars.testing import assert_frame_equal
+from polars.testing import assert_frame_equal, assert_frame_not_equal
+import deltalake
 import random
 import uuid
 import string
@@ -60,7 +61,7 @@ def random_partitioned_df() -> pl.DataFrame:
 
 
 @pytest.mark.parametrize(
-    "filetype",
+    "file_type",
     [
         FileType.DELTA,
         FileType.PARQUET,
@@ -68,7 +69,7 @@ def random_partitioned_df() -> pl.DataFrame:
         FileType.AVRO,
     ],
 )
-def test_basic_dataframe_operations(client: UCClient, filetype: FileType):
+def test_basic_dataframe_operations(client: UCClient, file_type: FileType):
     assert client.health_check()
 
     default_catalog = "unity"
@@ -76,7 +77,7 @@ def test_basic_dataframe_operations(client: UCClient, filetype: FileType):
     table_name = "test_table"
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        match filetype:
+        match file_type:
             case FileType.DELTA:
                 filepath = tmpdir
             case FileType.PARQUET:
@@ -119,7 +120,7 @@ def test_basic_dataframe_operations(client: UCClient, filetype: FileType):
                 catalog_name=default_catalog,
                 schema_name=default_schema,
                 table_type=TableType.EXTERNAL,
-                file_type=filetype,
+                file_type=file_type,
                 columns=columns,
                 storage_location=filepath,
             )
@@ -142,14 +143,14 @@ def test_basic_dataframe_operations(client: UCClient, filetype: FileType):
         )
         assert_frame_equal(df, df_read, check_row_order=False)
 
-        if filetype != FileType.AVRO:
+        if file_type != FileType.AVRO:
             df_scan = client.scan_table(
                 catalog=default_catalog, schema=default_schema, name=table_name
             )
             assert_frame_equal(pl.LazyFrame(df), df_scan, check_row_order=False)
 
         # Test APPEND writes; only supported for DELTA
-        if filetype == FileType.DELTA:
+        if file_type == FileType.DELTA:
             df2 = random_df()
             client.write_table(
                 df2,
@@ -201,7 +202,7 @@ def test_basic_dataframe_operations(client: UCClient, filetype: FileType):
             check_row_order=False,
         )
 
-        if filetype != FileType.AVRO:
+        if file_type != FileType.AVRO:
             df4_scan = client.scan_table(
                 catalog=default_catalog, schema=default_schema, name=table_name
             )
@@ -241,7 +242,7 @@ def test_basic_dataframe_operations(client: UCClient, filetype: FileType):
             check_row_order=False,
         )
 
-        if filetype != FileType.AVRO:
+        if file_type != FileType.AVRO:
             df5_scan = client.scan_table(
                 catalog=default_catalog, schema=default_schema, name=table_name
             )
@@ -249,13 +250,13 @@ def test_basic_dataframe_operations(client: UCClient, filetype: FileType):
 
 
 @pytest.mark.parametrize(
-    "filetype",
+    "file_type",
     [
         FileType.DELTA,
         FileType.PARQUET,
     ],
 )
-def test_partitioned_dataframe_operations(client: UCClient, filetype: FileType):
+def test_partitioned_dataframe_operations(client: UCClient, file_type: FileType):
     assert client.health_check()
 
     default_catalog = "unity"
@@ -263,7 +264,7 @@ def test_partitioned_dataframe_operations(client: UCClient, filetype: FileType):
     table_name = "test_table"
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        match filetype:
+        match file_type:
             case FileType.DELTA:
                 filepath = tmpdir
             case FileType.PARQUET:
@@ -316,7 +317,7 @@ def test_partitioned_dataframe_operations(client: UCClient, filetype: FileType):
                 catalog_name=default_catalog,
                 schema_name=default_schema,
                 table_type=TableType.EXTERNAL,
-                file_type=filetype,
+                file_type=file_type,
                 columns=columns,
                 storage_location=filepath,
             )
@@ -358,13 +359,13 @@ def test_partitioned_dataframe_operations(client: UCClient, filetype: FileType):
             catalog=default_catalog, schema=default_schema, name=table_name
         )
         assert_frame_equal(pl.concat([df, df2]), df_read2, check_row_order=False)
-        if filetype == FileType.DELTA:
+        if file_type == FileType.DELTA:
             assert_frame_equal(
                 pl.concat([df, df2]),
                 pl.read_delta(source=filepath),
                 check_row_order=False,
             )
-        if filetype == FileType.PARQUET:
+        if file_type == FileType.PARQUET:
             assert_frame_equal(
                 pl.concat([df, df2]),
                 pl.read_parquet(
@@ -458,3 +459,81 @@ def test_partitioned_dataframe_operations(client: UCClient, filetype: FileType):
             catalog=default_catalog, schema=default_schema, name=table_name
         )
         assert_frame_equal(pl.LazyFrame(df5), df5_scan, check_row_order=False)
+
+
+@pytest.mark.parametrize(
+    "file_type,partitioned",
+    [
+        (FileType.DELTA, False),
+        (FileType.PARQUET, False),
+        (FileType.DELTA, True),
+        (FileType.PARQUET, True),
+        (FileType.CSV, False),
+        (FileType.AVRO, False),
+    ],
+)
+def test_create_as_table(client: UCClient, file_type: FileType, partitioned: bool):
+    assert client.health_check()
+
+    default_catalog = "unity"
+    default_schema = "default"
+    table_name = "test_table"
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        match file_type:
+            case FileType.DELTA:
+                filepath = tmpdir
+            case FileType.PARQUET:
+                filepath = os.path.join(tmpdir, table_name + ".parquet")
+            case FileType.CSV:
+                filepath = os.path.join(tmpdir, table_name + ".csv")
+            case FileType.AVRO:
+                filepath = os.path.join(tmpdir, table_name + ".avro")
+            case _:
+                raise NotImplementedError
+
+        if not partitioned:
+            df = random_df()
+            client.create_as_table(
+                df=df,
+                catalog=default_catalog,
+                schema=default_schema,
+                name=table_name,
+                file_type=file_type,
+                table_type=TableType.EXTERNAL,
+                location="file://" + filepath,
+            )
+        else:
+            df = random_partitioned_df()
+            client.create_as_table(
+                df=df,
+                catalog=default_catalog,
+                schema=default_schema,
+                name=table_name,
+                file_type=file_type,
+                table_type=TableType.EXTERNAL,
+                location="file://" + filepath,
+                partition_cols=["part1", "part2"],
+            )
+
+            # Test the written table is actually partitioned
+            if file_type == FileType.DELTA:
+                tbl_read = deltalake.DeltaTable(table_uri=filepath)
+                assert tbl_read.metadata().partition_columns == ["part1", "part2"]
+            elif file_type == FileType.PARQUET:
+                df_read = pl.read_parquet(
+                    source=os.path.join(filepath, "**", "**", "*.parquet"),
+                    hive_partitioning=True,
+                    hive_schema={"part1": pl.Int64, "part2": pl.Int64},
+                )
+                assert_frame_equal(df, df_read, check_row_order=False)
+                assert_frame_not_equal(
+                    df,
+                    pl.read_parquet(source=filepath, hive_partitioning=False),
+                    check_row_order=False,
+                )
+
+        df_read = client.read_table(
+            catalog=default_catalog, schema=default_schema, name=table_name
+        )
+        assert_frame_equal(df, df_read, check_row_order=False)
