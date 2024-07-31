@@ -1,4 +1,4 @@
-from uc_wrapper import UCClient, FileType, TableType, WriteMode, SchemaEvolution
+from uc_wrapper import UCClient
 import polars as pl
 import os
 
@@ -24,7 +24,7 @@ client.register_as_table(
     catalog="unity",
     schema="default",
     name="csv_table",
-    file_type=FileType.CSV,
+    file_type="csv",
 )
 
 # Now we can read the created table in as a dataframe.
@@ -41,8 +41,8 @@ client.create_as_table(
     catalog="unity",
     schema="default",
     name="filtered_delta_table",
-    file_type=FileType.DELTA,
-    table_type=TableType.EXTERNAL,
+    file_type="delta",
+    table_type="external",
     location="file://" + os.path.join(TUTORIAL_DIR, "delta_dir"),
 )
 
@@ -60,8 +60,8 @@ client.write_table(
     catalog="unity",
     schema="default",
     name="filtered_delta_table",
-    mode=WriteMode.APPEND,
-    schema_evolution=SchemaEvolution.STRICT,
+    mode="append",
+    schema_evolution="strict",
 )
 
 # Now let's just verify we actually wrote more data to the Delta table.

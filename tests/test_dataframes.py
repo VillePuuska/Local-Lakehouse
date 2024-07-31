@@ -15,8 +15,6 @@ from uc_wrapper import (
     TableType,
     FileType,
     DataType,
-    WriteMode,
-    SchemaEvolution,
     SchemaMismatchError,
 )
 
@@ -133,8 +131,8 @@ def test_basic_dataframe_operations(client: UCClient, file_type: FileType):
             catalog=default_catalog,
             schema=default_schema,
             name=table_name,
-            mode=WriteMode.OVERWRITE,
-            schema_evolution=SchemaEvolution.STRICT,
+            mode="overwrite",
+            schema_evolution="strict",
         )
 
         # Test read_table and scan_table
@@ -157,8 +155,8 @@ def test_basic_dataframe_operations(client: UCClient, file_type: FileType):
                 catalog=default_catalog,
                 schema=default_schema,
                 name=table_name,
-                mode=WriteMode.APPEND,
-                schema_evolution=SchemaEvolution.STRICT,
+                mode="append",
+                schema_evolution="strict",
             )
             df_read2 = client.read_table(
                 catalog=default_catalog, schema=default_schema, name=table_name
@@ -178,8 +176,8 @@ def test_basic_dataframe_operations(client: UCClient, file_type: FileType):
                     catalog=default_catalog,
                     schema=default_schema,
                     name=table_name,
-                    mode=WriteMode.APPEND,
-                    schema_evolution=SchemaEvolution.STRICT,
+                    mode="append",
+                    schema_evolution="strict",
                 )
 
         df4 = random_df()
@@ -190,8 +188,8 @@ def test_basic_dataframe_operations(client: UCClient, file_type: FileType):
             catalog=default_catalog,
             schema=default_schema,
             name=table_name,
-            mode=WriteMode.OVERWRITE,
-            schema_evolution=SchemaEvolution.STRICT,
+            mode="overwrite",
+            schema_evolution="strict",
         )
 
         assert_frame_equal(
@@ -223,8 +221,8 @@ def test_basic_dataframe_operations(client: UCClient, file_type: FileType):
             catalog=default_catalog,
             schema=default_schema,
             name=table_name,
-            mode=WriteMode.OVERWRITE,
-            schema_evolution=SchemaEvolution.OVERWRITE,
+            mode="overwrite",
+            schema_evolution="overwrite",
         )
 
         table = client.get_table(
@@ -330,8 +328,8 @@ def test_partitioned_dataframe_operations(client: UCClient, file_type: FileType)
             catalog=default_catalog,
             schema=default_schema,
             name=table_name,
-            mode=WriteMode.OVERWRITE,
-            schema_evolution=SchemaEvolution.STRICT,
+            mode="overwrite",
+            schema_evolution="strict",
         )
 
         # Test read and scan
@@ -352,8 +350,8 @@ def test_partitioned_dataframe_operations(client: UCClient, file_type: FileType)
             catalog=default_catalog,
             schema=default_schema,
             name=table_name,
-            mode=WriteMode.APPEND,
-            schema_evolution=SchemaEvolution.STRICT,
+            mode="append",
+            schema_evolution="strict",
         )
         df_read2 = client.read_table(
             catalog=default_catalog, schema=default_schema, name=table_name
@@ -384,8 +382,8 @@ def test_partitioned_dataframe_operations(client: UCClient, file_type: FileType)
                 catalog=default_catalog,
                 schema=default_schema,
                 name=table_name,
-                mode=WriteMode.APPEND,
-                schema_evolution=SchemaEvolution.STRICT,
+                mode="append",
+                schema_evolution="strict",
             )
 
         df4 = pl.concat([random_partitioned_df(), random_partitioned_df()])
@@ -402,8 +400,8 @@ def test_partitioned_dataframe_operations(client: UCClient, file_type: FileType)
             catalog=default_catalog,
             schema=default_schema,
             name=table_name,
-            mode=WriteMode.OVERWRITE,
-            schema_evolution=SchemaEvolution.STRICT,
+            mode="overwrite",
+            schema_evolution="strict",
         )
 
         assert_frame_equal(
@@ -436,8 +434,8 @@ def test_partitioned_dataframe_operations(client: UCClient, file_type: FileType)
             catalog=default_catalog,
             schema=default_schema,
             name=table_name,
-            mode=WriteMode.OVERWRITE,
-            schema_evolution=SchemaEvolution.OVERWRITE,
+            mode="overwrite",
+            schema_evolution="overwrite",
         )
 
         table = client.get_table(
@@ -500,7 +498,7 @@ def test_create_as_table(client: UCClient, file_type: FileType, partitioned: boo
                 schema=default_schema,
                 name=table_name,
                 file_type=file_type,
-                table_type=TableType.EXTERNAL,
+                table_type="external",
                 location="file://" + filepath,
             )
         else:
@@ -510,8 +508,8 @@ def test_create_as_table(client: UCClient, file_type: FileType, partitioned: boo
                 catalog=default_catalog,
                 schema=default_schema,
                 name=table_name,
-                file_type=file_type,
-                table_type=TableType.EXTERNAL,
+                file_type=file_type.value.lower(),  # test this works with string literal as well
+                table_type="external",
                 location="file://" + filepath,
                 partition_cols=["part1", "part2"],
             )
@@ -556,7 +554,7 @@ def test_register_as_table(client: UCClient):
             catalog=default_catalog,
             schema=default_schema,
             name=table_name + "np-delta",
-            file_type=FileType.DELTA,
+            file_type="delta",
         )
         table = client.get_table(
             catalog=default_catalog,
@@ -584,7 +582,7 @@ def test_register_as_table(client: UCClient):
             catalog=default_catalog,
             schema=default_schema,
             name=table_name + "p-delta",
-            file_type=FileType.DELTA,
+            file_type="delta",
             partition_cols=["part1", "part2"],
         )
         table = client.get_table(
@@ -610,7 +608,7 @@ def test_register_as_table(client: UCClient):
             catalog=default_catalog,
             schema=default_schema,
             name=table_name + "np-parquet",
-            file_type=FileType.PARQUET,
+            file_type="parquet",
         )
         table = client.get_table(
             catalog=default_catalog,
@@ -644,7 +642,7 @@ def test_register_as_table(client: UCClient):
             catalog=default_catalog,
             schema=default_schema,
             name=table_name + "p-parquet",
-            file_type=FileType.PARQUET,
+            file_type="parquet",
             partition_cols=["part1", "part2"],
         )
         table = client.get_table(
@@ -674,7 +672,7 @@ def test_register_as_table(client: UCClient):
             catalog=default_catalog,
             schema=default_schema,
             name=table_name + "csv",
-            file_type=FileType.CSV,
+            file_type="csv",
         )
         table = client.get_table(
             catalog=default_catalog,
@@ -703,7 +701,7 @@ def test_register_as_table(client: UCClient):
             catalog=default_catalog,
             schema=default_schema,
             name=table_name + "avro",
-            file_type=FileType.AVRO,
+            file_type="avro",
         )
         table = client.get_table(
             catalog=default_catalog,

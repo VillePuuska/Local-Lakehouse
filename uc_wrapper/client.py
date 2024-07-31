@@ -1,5 +1,6 @@
 import requests
 import polars as pl
+from typing import Literal
 from .exceptions import UnsupportedOperationError
 from .models import Catalog, Schema, Table, TableType, FileType
 from .dataframe import (
@@ -26,6 +27,12 @@ from .uc_api_wrapper import (
     list_tables,
     update_catalog,
     update_schema,
+)
+from .utils import (
+    literal_to_filetype,
+    literal_to_schemaevolution,
+    literal_to_tabletype,
+    literal_to_writemode,
 )
 
 
@@ -248,8 +255,10 @@ class UCClient:
         catalog: str,
         schema: str,
         name: str,
-        mode: WriteMode = WriteMode.APPEND,
-        schema_evolution: SchemaEvolution = SchemaEvolution.STRICT,
+        mode: Literal["append", "overwrite"] | WriteMode = WriteMode.APPEND,
+        schema_evolution: (
+            Literal["strict", "union", "overwrite"] | SchemaEvolution
+        ) = SchemaEvolution.STRICT,
     ) -> None:
         """
         Writes the Polars DataFrame `df` to the Unity Catalog table
@@ -268,6 +277,10 @@ class UCClient:
             - SchemaEvolution.OVERWRITE will attempt to cast the existing table to the schema of the new
               DataFrame; raises if impossible.
         """
+        if not isinstance(schema_evolution, SchemaEvolution):
+            schema_evolution = literal_to_schemaevolution(schema_evolution)
+        if not isinstance(mode, WriteMode):
+            mode = literal_to_writemode(mode)
         table = self.get_table(catalog=catalog, schema=schema, table=name)
         new_columns = write_table(
             table=table, df=df, mode=mode, schema_evolution=schema_evolution
@@ -286,8 +299,10 @@ class UCClient:
         catalog: str,
         schema: str,
         name: str,
-        file_type: FileType = FileType.DELTA,
-        table_type: TableType = TableType.MANAGED,
+        file_type: (
+            Literal["delta", "csv", "json", "avro", "parquet", "orc", "text"] | FileType
+        ) = FileType.DELTA,
+        table_type: Literal["managed", "external"] | TableType = TableType.EXTERNAL,
         location: str | None = None,
         partition_cols: list[str] | None = None,
     ) -> Table:
@@ -295,6 +310,10 @@ class UCClient:
         Creates a new table to Unity Catalog with the schema of the Polars DataFrame `df`
         and writes `df` to the new table. Raises an AlreadyExistsError if the table alredy exists.
         """
+        if not isinstance(file_type, FileType):
+            file_type = literal_to_filetype(file_type)
+        if not isinstance(table_type, TableType):
+            table_type = literal_to_tabletype(table_type)
         if table_type == TableType.MANAGED:
             raise UnsupportedOperationError("MANAGED tables are not yet supported.")
         if table_type == TableType.EXTERNAL and location is None:
@@ -337,13 +356,17 @@ class UCClient:
         catalog: str,
         schema: str,
         name: str,
-        file_type: FileType,
+        file_type: (
+            Literal["delta", "csv", "json", "avro", "parquet", "orc", "text"] | FileType
+        ),
         partition_cols: list[str] | None = None,
     ) -> Table:
         """
         Creates a new table to Unity Catalog from a table/file at `filepath`.
         Raises an AlreadyExistsError if the table alredy exists.
         """
+        if not isinstance(file_type, FileType):
+            file_type = literal_to_filetype(file_type)
         if not filepath.startswith("file://"):
             if not filepath.startswith("/"):
                 raise UnsupportedOperationError(
