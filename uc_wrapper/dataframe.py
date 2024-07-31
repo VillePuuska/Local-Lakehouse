@@ -59,6 +59,7 @@ def polars_type_to_uc_type(t: pl.DataType) -> DataType:
     return DataType.NULL
 
 
+# TODO: Decimal scale and precision
 def df_schema_to_uc_schema(df: pl.DataFrame | pl.LazyFrame) -> list[Column]:
     res = []
     for i, (col_name, col_type) in enumerate(df.schema.items()):
@@ -111,6 +112,7 @@ def uc_type_to_polars_type(t: DataType) -> pl.DataType:
             raise UnsupportedOperationError(f"Unsupported datatype: {t.value}")
 
 
+# TODO: Decimal scale and precision
 def uc_schema_to_df_schema(cols: list[Column]) -> dict[str, pl.DataType]:
     return {col.name: uc_type_to_polars_type(col.data_type) for col in cols}
 

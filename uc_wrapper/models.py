@@ -92,28 +92,37 @@ class Column(BaseModel):
     data_type: DataType = Field(
         validation_alias="type_name", serialization_alias="type_name"
     )
-    type_precision: int | None = None
-    type_scale: int | None = None
+    type_precision: int = 0  # TODO: handle this
+    type_scale: int = 0  # TODO: handle this
     type_interval_type: int | None = None
     position: int
     comment: str | None = None
     nullable: bool
     partition_index: int | None = None
-    type_json_override: str | None = None  # TODO: better way to handle complex types?
 
     @computed_field  # type: ignore[misc]
     @property
     def type_text(self) -> str:
-        return self.data_type.value.lower()
+        txt = self.data_type.value.lower()
+        match txt:
+            case "long":
+                return "bigint"
+            case "short":
+                return "smallint"
+            case "byte":
+                return "tinyint"
+            case _:
+                return txt
 
     @computed_field  # type: ignore[misc]
     @property
-    def type_json(self) -> str:  # TODO: better way to handle complex types?
-        if self.type_json_override is not None:
-            return self.type_json_override
+    def type_json(self) -> str:
+        json_type = self.data_type.value.lower()
+        if json_type == "int":
+            json_type = "integer"
         dct = {
             "name": self.name,
-            "type": self.type_text,
+            "type": json_type,
             "nullable": self.nullable,
             "metadata": {},
         }
