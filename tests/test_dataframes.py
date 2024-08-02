@@ -8,6 +8,7 @@ import uuid
 import string
 import tempfile
 import pytest
+from typing import Callable
 from uc_wrapper import (
     UCClient,
     Column,
@@ -19,45 +20,6 @@ from uc_wrapper import (
 )
 
 
-RANDOM_DF_ROWS = 10
-
-
-def random_df() -> pl.DataFrame:
-    uuids = [str(uuid.uuid4()) for _ in range(RANDOM_DF_ROWS)]
-    ints = [random.randint(0, 10000) for _ in range(RANDOM_DF_ROWS)]
-    floats = [random.uniform(0, 10000) for _ in range(RANDOM_DF_ROWS)]
-    strings = [
-        "".join(
-            random.choices(population=string.ascii_letters, k=random.randint(2, 256))
-        )
-        for _ in range(RANDOM_DF_ROWS)
-    ]
-    return pl.DataFrame(
-        {
-            "id": uuids,
-            "ints": ints,
-            "floats": floats,
-            "strings": strings,
-        },
-        schema={
-            "id": pl.String,
-            "ints": pl.Int64,
-            "floats": pl.Float64,
-            "strings": pl.String,
-        },
-    )
-
-
-def random_partitioned_df() -> pl.DataFrame:
-    df = random_df()
-    part1 = random.choices(population=[0, 1, 2], k=df.height)
-    part2 = random.choices(population=[0, 1, 2], k=df.height)
-    df = df.with_columns(
-        [pl.Series(part1).alias("part1"), pl.Series(part2).alias("part2")]
-    )
-    return df
-
-
 @pytest.mark.parametrize(
     "file_type",
     [
@@ -67,7 +29,9 @@ def random_partitioned_df() -> pl.DataFrame:
         FileType.AVRO,
     ],
 )
-def test_basic_dataframe_operations(client: UCClient, file_type: FileType):
+def test_basic_dataframe_operations(
+    client: UCClient, random_df: Callable[[], pl.DataFrame], file_type: FileType
+):
     assert client.health_check()
 
     default_catalog = "unity"
@@ -254,7 +218,12 @@ def test_basic_dataframe_operations(client: UCClient, file_type: FileType):
         FileType.PARQUET,
     ],
 )
-def test_partitioned_dataframe_operations(client: UCClient, file_type: FileType):
+def test_partitioned_dataframe_operations(
+    client: UCClient,
+    random_df: Callable[[], pl.DataFrame],
+    random_partitioned_df: Callable[[], pl.DataFrame],
+    file_type: FileType,
+):
     assert client.health_check()
 
     default_catalog = "unity"
@@ -470,7 +439,13 @@ def test_partitioned_dataframe_operations(client: UCClient, file_type: FileType)
         (FileType.AVRO, False),
     ],
 )
-def test_create_as_table(client: UCClient, file_type: FileType, partitioned: bool):
+def test_create_as_table(
+    client: UCClient,
+    random_df: Callable[[], pl.DataFrame],
+    random_partitioned_df: Callable[[], pl.DataFrame],
+    file_type: FileType,
+    partitioned: bool,
+):
     assert client.health_check()
 
     default_catalog = "unity"
@@ -537,7 +512,11 @@ def test_create_as_table(client: UCClient, file_type: FileType, partitioned: boo
         assert_frame_equal(df, df_read, check_row_order=False)
 
 
-def test_register_as_table(client: UCClient):
+def test_register_as_table(
+    client: UCClient,
+    random_df: Callable[[], pl.DataFrame],
+    random_partitioned_df: Callable[[], pl.DataFrame],
+):
     assert client.health_check()
 
     default_catalog = "unity"

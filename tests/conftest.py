@@ -5,12 +5,19 @@ from collections.abc import Generator
 import time
 import requests
 import os
+import polars as pl
+import uuid
+import random
+import string
 import pytest
+from typing import Callable
 from uc_wrapper import UCClient
 
 
 USE_EXISTING_IMAGE_ENV_VAR = "UC_TEST_USE_IMAGE"
 IMAGE_NAME_ENV_VAR = "UC_TEST_IMAGE_TAG"
+
+RANDOM_DF_ROWS = 10
 
 
 @pytest.fixture(scope="module")
@@ -56,3 +63,48 @@ def client(image: str) -> Generator[UCClient, None, None]:
                 counter += 1
 
         yield UCClient(uc_url=uc_url)
+
+
+def _random_df() -> pl.DataFrame:
+    uuids = [str(uuid.uuid4()) for _ in range(RANDOM_DF_ROWS)]
+    ints = [random.randint(0, 10000) for _ in range(RANDOM_DF_ROWS)]
+    floats = [random.uniform(0, 10000) for _ in range(RANDOM_DF_ROWS)]
+    strings = [
+        "".join(
+            random.choices(population=string.ascii_letters, k=random.randint(2, 256))
+        )
+        for _ in range(RANDOM_DF_ROWS)
+    ]
+    return pl.DataFrame(
+        {
+            "id": uuids,
+            "ints": ints,
+            "floats": floats,
+            "strings": strings,
+        },
+        schema={
+            "id": pl.String,
+            "ints": pl.Int64,
+            "floats": pl.Float64,
+            "strings": pl.String,
+        },
+    )
+
+
+@pytest.fixture
+def random_df() -> Callable[[], pl.DataFrame]:
+    return _random_df
+
+
+@pytest.fixture
+def random_partitioned_df() -> Callable[[], pl.DataFrame]:
+    def _random_partitioned_df() -> pl.DataFrame:
+        df = _random_df()
+        part1 = random.choices(population=[0, 1, 2], k=df.height)
+        part2 = random.choices(population=[0, 1, 2], k=df.height)
+        df = df.with_columns(
+            [pl.Series(part1).alias("part1"), pl.Series(part2).alias("part2")]
+        )
+        return df
+
+    return _random_partitioned_df

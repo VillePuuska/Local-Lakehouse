@@ -1,7 +1,8 @@
 import requests
 import polars as pl
+import duckdb
 from typing import Literal
-from .exceptions import UnsupportedOperationError
+from .exceptions import UnsupportedOperationError, DuckDBConnectionSetupError
 from .models import Catalog, Schema, Table, TableType, FileType
 from .dataframe import (
     WriteMode,
@@ -34,6 +35,9 @@ from .utils import (
     literal_to_tabletype,
     literal_to_writemode,
 )
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class UCClient:
@@ -46,6 +50,27 @@ class UCClient:
     def __init__(self, uc_url: str = "http://localhost:8080") -> None:
         self.uc_url = uc_url.removesuffix("/")
         self.session = requests.Session()
+
+        self.conn: duckdb.DuckDBPyConnection | None
+        try:
+            self.conn = duckdb.connect()
+            duckdb_uc_setup = f"""
+    install uc_catalog from core_nightly;
+    load uc_catalog;
+    install delta;
+    load delta;
+    CREATE SECRET (
+        TYPE UC,
+        TOKEN 'not-used',
+        ENDPOINT '{uc_url}',
+        AWS_REGION 'us-east-2'
+    );
+    ATTACH 'unity' AS unity (TYPE UC_CATALOG);
+    """
+            self.conn.sql(duckdb_uc_setup)
+        except:
+            logger.warning("Failed to create a DuckDB connection to Unity Catalog.")
+            self.conn = None
 
     def health_check(self) -> bool:
         """
@@ -397,3 +422,12 @@ class UCClient:
         table.columns = cols
         table = self.create_table(table=table)
         return table
+
+    def sql(self, query: str) -> duckdb.DuckDBPyRelation:
+        """
+        Passes the `query` to the DuckDB connection.
+        NOTE: at the moment the connection is read only and only supports Delta Tables.
+        """
+        if self.conn is None:
+            raise DuckDBConnectionSetupError
+        return self.conn.sql(query=query)
