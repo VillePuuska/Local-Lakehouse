@@ -1,7 +1,7 @@
 import tempfile
 import tempfile
 import pytest
-from uc_wrapper import (
+from uchelper import (
     UCClient,
     Catalog,
     Column,

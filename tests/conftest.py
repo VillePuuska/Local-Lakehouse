@@ -11,7 +11,7 @@ import random
 import string
 import pytest
 from typing import Callable
-from uc_wrapper import UCClient
+from uchelper import UCClient
 
 
 USE_EXISTING_IMAGE_ENV_VAR = "UC_TEST_USE_IMAGE"
@@ -20,7 +20,7 @@ IMAGE_NAME_ENV_VAR = "UC_TEST_IMAGE_TAG"
 RANDOM_DF_ROWS = 10
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="package")
 def image() -> Generator[str, None, None]:
     env_var = os.getenv(USE_EXISTING_IMAGE_ENV_VAR)
     if env_var is not None and env_var.upper() == "TRUE":

@@ -1,7 +1,7 @@
 [tool.poetry]
-name = "uc-wrapper"
+name = "uchelper"
 version = "0.1.0"
-description = "Wrapper for Unity Catalog REST API to expose a Dataframe API to access tables stored in the local filesystem registered in Unity Catalog."
+description = "Wrapper for Unity Catalog REST API to expose a DataFrame API to access tables stored in the local filesystem registered in Unity Catalog."
 authors = ["Ville Puuska"]
 readme = "README.md"
 

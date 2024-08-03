@@ -1,4 +1,4 @@
-from uc_wrapper import UCClient
+from uchelper import UCClient
 import polars as pl
 import os
 

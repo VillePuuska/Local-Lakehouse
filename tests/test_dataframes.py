@@ -9,7 +9,7 @@ import string
 import tempfile
 import pytest
 from typing import Callable
-from uc_wrapper import (
+from uchelper import (
     UCClient,
     Column,
     Table,

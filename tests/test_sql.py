@@ -3,7 +3,7 @@ import polars as pl
 from polars.testing import assert_frame_equal
 import tempfile
 from typing import Callable
-from uc_wrapper import (
+from uchelper import (
     UCClient,
     Catalog,
     Schema,

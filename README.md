@@ -2,7 +2,7 @@
 
 ![CI](https://github.com/VillePuuska/Local-Lakehouse/actions/workflows/CI.yaml/badge.svg)
 
-PoC project for a Python library for using Unity Catalog to manage my local structured data and accessing it via a Polars-based DataFrame API and DuckDB-based SQL API.
+PoC project for a Python package `uchelper` for using Unity Catalog to manage my local structured data and accessing it via a Polars-based DataFrame API and DuckDB-based SQL API.
 
 Still work in progress. Feel free to request more functionality or priorisation of functionality that is still WIP by opening an issue; or just send a PR.
 
