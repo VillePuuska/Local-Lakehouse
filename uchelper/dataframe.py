@@ -19,54 +19,59 @@ class SchemaEvolution(str, Enum):
     OVERWRITE = "OVERWRITE"
 
 
-def polars_type_to_uc_type(t: pl.DataType) -> DataType:
+def polars_type_to_uc_type(t: pl.DataType) -> tuple[DataType, int, int]:
+    """
+    Converts the enum DataType to a polars.DataType
+    """
     match t:
         case pl.Decimal:
-            return DataType.DECIMAL
+            return (DataType.DECIMAL, t.precision, t.scale)
         case pl.Float32:
-            return DataType.FLOAT
+            return (DataType.FLOAT, 0, 0)
         case pl.Float64:
-            return DataType.DOUBLE
+            return (DataType.DOUBLE, 0, 0)
         case pl.Int8:
-            return DataType.BYTE
+            return (DataType.BYTE, 0, 0)
         case pl.Int16:
-            return DataType.SHORT
+            return (DataType.SHORT, 0, 0)
         case pl.Int32:
-            return DataType.INT
+            return (DataType.INT, 0, 0)
         case pl.Int64:
-            return DataType.LONG
+            return (DataType.LONG, 0, 0)
         case pl.Date:
-            return DataType.DATE
+            return (DataType.DATE, 0, 0)
         case pl.Datetime:
-            return DataType.TIMESTAMP
+            return (DataType.TIMESTAMP, 0, 0)
         case pl.Array:
-            return DataType.ARRAY
+            return (DataType.ARRAY, 0, 0)
         case pl.List:
-            return DataType.ARRAY
+            return (DataType.ARRAY, 0, 0)
         case pl.Struct:
-            return DataType.STRUCT
+            return (DataType.STRUCT, 0, 0)
         case pl.String | pl.Utf8:
-            return DataType.STRING
+            return (DataType.STRING, 0, 0)
         case pl.Binary:
-            return DataType.BINARY
+            return (DataType.BINARY, 0, 0)
         case pl.Boolean:
-            return DataType.BOOLEAN
+            return (DataType.BOOLEAN, 0, 0)
         case pl.Null:
-            return DataType.NULL
+            return (DataType.NULL, 0, 0)
         case _:
             raise UnsupportedOperationError(f"Unsupported datatype: {t}")
     # Why did mypy start complaining about missing return here after bumping Polars to 1.3.0?
-    return DataType.NULL
+    return (DataType.NULL, 0, 0)
 
 
-# TODO: Decimal scale and precision
 def df_schema_to_uc_schema(df: pl.DataFrame | pl.LazyFrame) -> list[Column]:
     res = []
     for i, (col_name, col_type) in enumerate(df.schema.items()):
+        t = polars_type_to_uc_type(col_type)
         res.append(
             Column(
                 name=col_name,
-                data_type=polars_type_to_uc_type(col_type),
+                data_type=t[0],
+                type_precision=t[1],
+                type_scale=t[2],
                 position=i,
                 nullable=True,
             )
@@ -74,7 +79,9 @@ def df_schema_to_uc_schema(df: pl.DataFrame | pl.LazyFrame) -> list[Column]:
     return res
 
 
-def uc_type_to_polars_type(t: DataType) -> pl.DataType:
+def uc_type_to_polars_type(
+    t: DataType, precision: int = 0, scale: int = 0
+) -> pl.DataType:
     match t:
         case DataType.BOOLEAN:
             return cast(pl.DataType, pl.Boolean)
@@ -99,7 +106,7 @@ def uc_type_to_polars_type(t: DataType) -> pl.DataType:
         case DataType.BINARY:
             return cast(pl.DataType, pl.Binary)
         case DataType.DECIMAL:
-            return cast(pl.DataType, pl.Decimal)
+            return cast(pl.DataType, pl.Decimal(precision=precision, scale=scale))
         case DataType.ARRAY:
             return cast(pl.DataType, pl.Array)
         case DataType.STRUCT:
@@ -112,7 +119,6 @@ def uc_type_to_polars_type(t: DataType) -> pl.DataType:
             raise UnsupportedOperationError(f"Unsupported datatype: {t.value}")
 
 
-# TODO: Decimal scale and precision
 def uc_schema_to_df_schema(cols: list[Column]) -> dict[str, pl.DataType]:
     return {col.name: uc_type_to_polars_type(col.data_type) for col in cols}
 
@@ -124,6 +130,11 @@ def check_schema_equality(left: list[Column], right: list[Column]) -> bool:
         if left_col.name != right_col.name:
             return False
         if left_col.data_type != right_col.data_type:
+            return False
+        if left_col.data_type == DataType.DECIMAL and (
+            left_col.type_precision != right_col.type_precision
+            or left_col.type_scale != right_col.type_scale
+        ):
             return False
     return True
 

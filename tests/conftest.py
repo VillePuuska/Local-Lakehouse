@@ -69,6 +69,7 @@ def _random_df() -> pl.DataFrame:
     uuids = [str(uuid.uuid4()) for _ in range(RANDOM_DF_ROWS)]
     ints = [random.randint(0, 10000) for _ in range(RANDOM_DF_ROWS)]
     floats = [random.uniform(0, 10000) for _ in range(RANDOM_DF_ROWS)]
+    decimals = [random.uniform(0, 10000) for _ in range(RANDOM_DF_ROWS)]
     strings = [
         "".join(
             random.choices(population=string.ascii_letters, k=random.randint(2, 256))
@@ -80,12 +81,14 @@ def _random_df() -> pl.DataFrame:
             "id": uuids,
             "ints": ints,
             "floats": floats,
+            "decimals": decimals,
             "strings": strings,
         },
         schema={
             "id": pl.String,
             "ints": pl.Int64,
             "floats": pl.Float64,
+            "decimals": pl.Decimal(precision=10, scale=5),
             "strings": pl.String,
         },
     )

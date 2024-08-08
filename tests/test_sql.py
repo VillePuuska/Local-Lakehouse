@@ -35,8 +35,17 @@ def test_sql(
     client.sql("ATTACH 'test_cat' AS test_cat (TYPE UC_CATALOG)")
 
     for cat_name in [default_catalog, "test_cat"]:
-        df1 = random_df().with_columns(pl.lit(1).alias("source"))
-        df2 = random_df().with_columns(pl.lit(2).alias("source"))
+        # DuckDB does not support DECIMAL
+        df1 = (
+            random_df()
+            .with_columns(pl.lit(1).alias("source"))
+            .cast({"decimals": pl.Float64})
+        )
+        df2 = (
+            random_df()
+            .with_columns(pl.lit(2).alias("source"))
+            .cast({"decimals": pl.Float64})
+        )
 
         with tempfile.TemporaryDirectory() as tmpdir:
             client.create_as_table(

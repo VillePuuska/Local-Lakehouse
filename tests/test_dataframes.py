@@ -70,12 +70,25 @@ def test_basic_dataframe_operations(
                 nullable=False,
             ),
             Column(
-                name="strings",
-                data_type=DataType.STRING,
+                name="decimals",
+                data_type=DataType.DECIMAL,
+                type_precision=10,
+                type_scale=5,
                 position=3,
                 nullable=False,
             ),
+            Column(
+                name="strings",
+                data_type=DataType.STRING,
+                position=4,
+                nullable=False,
+            ),
         ]
+        # Polars does not support DECIMAL when reading CSVs
+        if file_type == FileType.CSV:
+            columns[3].data_type = DataType.DOUBLE
+            columns[3].type_precision = 0
+            columns[3].type_scale = 0
         client.create_table(
             Table(
                 name=table_name,
@@ -89,6 +102,9 @@ def test_basic_dataframe_operations(
         )
 
         df = random_df()
+        # Polars does not support DECIMAL when reading CSVs
+        if file_type == FileType.CSV:
+            df = df.cast({"decimals": pl.Float64})
 
         client.write_table(
             df,
@@ -145,6 +161,9 @@ def test_basic_dataframe_operations(
                 )
 
         df4 = random_df()
+        # Polars does not support DECIMAL when reading CSVs
+        if file_type == FileType.CSV:
+            df4 = df4.cast({"decimals": pl.Float64})
 
         # Test OVERWRITE writes
         client.write_table(
@@ -172,6 +191,9 @@ def test_basic_dataframe_operations(
 
         df5 = random_df()
         df5 = df5.cast({"ints": pl.String})
+        # Polars does not support DECIMAL when reading CSVs
+        if file_type == FileType.CSV:
+            df5 = df5.cast({"decimals": pl.Float64})
 
         table = client.get_table(
             catalog=default_catalog, schema=default_schema, table=table_name
@@ -258,22 +280,30 @@ def test_partitioned_dataframe_operations(
                 nullable=False,
             ),
             Column(
+                name="decimals",
+                data_type=DataType.DECIMAL,
+                type_precision=10,
+                type_scale=5,
+                position=3,
+                nullable=False,
+            ),
+            Column(
                 name="strings",
                 data_type=DataType.STRING,
-                position=3,
+                position=4,
                 nullable=False,
             ),
             Column(
                 name="part1",
                 data_type=DataType.LONG,
-                position=4,
+                position=5,
                 nullable=False,
                 partition_index=0,
             ),
             Column(
                 name="part2",
                 data_type=DataType.LONG,
-                position=5,
+                position=6,
                 nullable=False,
                 partition_index=1,
             ),
@@ -360,8 +390,8 @@ def test_partitioned_dataframe_operations(
         # every partition. Otherwise, we might not overwrite all data
         # in the case of a partitioned Parquet table.
         df_concat = pl.concat([df, df2])
-        df4 = df4.replace_column(4, df_concat.select("part1").to_series())
-        df4 = df4.replace_column(5, df_concat.select("part2").to_series())
+        df4 = df4.replace_column(5, df_concat.select("part1").to_series())
+        df4 = df4.replace_column(6, df_concat.select("part2").to_series())
 
         # Test OVERWRITE writes
         client.write_table(
@@ -388,8 +418,8 @@ def test_partitioned_dataframe_operations(
 
         df5 = pl.concat([random_partitioned_df(), random_partitioned_df()])
         df5 = df5.cast({"ints": pl.String})
-        df5 = df5.replace_column(4, df_concat.select("part1").to_series())
-        df5 = df5.replace_column(5, df_concat.select("part2").to_series())
+        df5 = df5.replace_column(5, df_concat.select("part1").to_series())
+        df5 = df5.replace_column(6, df_concat.select("part2").to_series())
 
         table = client.get_table(
             catalog=default_catalog, schema=default_schema, table=table_name
@@ -467,6 +497,10 @@ def test_create_as_table(
 
         if not partitioned:
             df = random_df()
+            # Polars does not support DECIMAL when reading CSVs
+            if file_type == FileType.CSV:
+                df = df.cast({"decimals": pl.Float64})
+
             client.create_as_table(
                 df=df,
                 catalog=default_catalog,
@@ -643,7 +677,7 @@ def test_register_as_table(
     # CSV
     with tempfile.TemporaryDirectory() as tmpdir:
         filepath = os.path.join(tmpdir, "sgvsavdavsdsvd.csv")
-        df = random_df()
+        df = random_df().cast({"decimals": pl.Float64})
         df.write_csv(file=filepath)
 
         client.register_as_table(
