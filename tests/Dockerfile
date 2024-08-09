@@ -1,4 +1,4 @@
-FROM amazoncorretto:22.0.1-alpine3.19
+FROM amazoncorretto:17.0.12-alpine3.20
 
 RUN apk update && apk upgrade && \
     apk add --no-cache git bash ncurses && \
