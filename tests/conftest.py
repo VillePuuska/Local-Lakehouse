@@ -11,7 +11,7 @@ import random
 import string
 import pytest
 from typing import Callable
-from uchelper import UCClient
+from uchelper import UCClient, Column, DataType
 
 
 USE_EXISTING_IMAGE_ENV_VAR = "UC_TEST_USE_IMAGE"
@@ -100,6 +100,44 @@ def random_df() -> Callable[[], pl.DataFrame]:
 
 
 @pytest.fixture
+def random_df_cols() -> list[Column]:
+    return [
+        Column(
+            name="id",
+            data_type=DataType.STRING,
+            position=0,
+            nullable=False,
+        ),
+        Column(
+            name="ints",
+            data_type=DataType.LONG,
+            position=1,
+            nullable=False,
+        ),
+        Column(
+            name="floats",
+            data_type=DataType.DOUBLE,
+            position=2,
+            nullable=False,
+        ),
+        Column(
+            name="decimals",
+            data_type=DataType.DECIMAL,
+            type_precision=10,
+            type_scale=5,
+            position=3,
+            nullable=False,
+        ),
+        Column(
+            name="strings",
+            data_type=DataType.STRING,
+            position=4,
+            nullable=False,
+        ),
+    ]
+
+
+@pytest.fixture
 def random_partitioned_df() -> Callable[[], pl.DataFrame]:
     def _random_partitioned_df() -> pl.DataFrame:
         df = _random_df()
@@ -111,3 +149,55 @@ def random_partitioned_df() -> Callable[[], pl.DataFrame]:
         return df
 
     return _random_partitioned_df
+
+
+@pytest.fixture
+def random_partitioned_df_cols() -> list[Column]:
+    return [
+        Column(
+            name="id",
+            data_type=DataType.STRING,
+            position=0,
+            nullable=False,
+        ),
+        Column(
+            name="ints",
+            data_type=DataType.LONG,
+            position=1,
+            nullable=False,
+        ),
+        Column(
+            name="floats",
+            data_type=DataType.DOUBLE,
+            position=2,
+            nullable=False,
+        ),
+        Column(
+            name="decimals",
+            data_type=DataType.DECIMAL,
+            type_precision=10,
+            type_scale=5,
+            position=3,
+            nullable=False,
+        ),
+        Column(
+            name="strings",
+            data_type=DataType.STRING,
+            position=4,
+            nullable=False,
+        ),
+        Column(
+            name="part1",
+            data_type=DataType.LONG,
+            position=5,
+            nullable=False,
+            partition_index=0,
+        ),
+        Column(
+            name="part2",
+            data_type=DataType.LONG,
+            position=6,
+            nullable=False,
+            partition_index=1,
+        ),
+    ]

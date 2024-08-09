@@ -3,9 +3,6 @@ import tempfile
 import polars as pl
 from polars.testing import assert_frame_equal, assert_frame_not_equal
 import deltalake
-import random
-import uuid
-import string
 import tempfile
 import pytest
 from typing import Callable
@@ -30,7 +27,10 @@ from uchelper import (
     ],
 )
 def test_basic_dataframe_operations(
-    client: UCClient, random_df: Callable[[], pl.DataFrame], file_type: FileType
+    client: UCClient,
+    random_df: Callable[[], pl.DataFrame],
+    random_df_cols: list[Column],
+    file_type: FileType,
 ):
     assert client.health_check()
 
@@ -50,45 +50,13 @@ def test_basic_dataframe_operations(
                 filepath = os.path.join(tmpdir, table_name + ".avro")
             case _:
                 raise NotImplementedError
-        columns = [
-            Column(
-                name="id",
-                data_type=DataType.STRING,
-                position=0,
-                nullable=False,
-            ),
-            Column(
-                name="ints",
-                data_type=DataType.LONG,
-                position=1,
-                nullable=False,
-            ),
-            Column(
-                name="floats",
-                data_type=DataType.DOUBLE,
-                position=2,
-                nullable=False,
-            ),
-            Column(
-                name="decimals",
-                data_type=DataType.DECIMAL,
-                type_precision=10,
-                type_scale=5,
-                position=3,
-                nullable=False,
-            ),
-            Column(
-                name="strings",
-                data_type=DataType.STRING,
-                position=4,
-                nullable=False,
-            ),
-        ]
+
         # Polars does not support DECIMAL when reading CSVs
         if file_type == FileType.CSV:
-            columns[3].data_type = DataType.DOUBLE
-            columns[3].type_precision = 0
-            columns[3].type_scale = 0
+            random_df_cols[3].data_type = DataType.DOUBLE
+            random_df_cols[3].type_precision = 0
+            random_df_cols[3].type_scale = 0
+
         client.create_table(
             Table(
                 name=table_name,
@@ -96,7 +64,7 @@ def test_basic_dataframe_operations(
                 schema_name=default_schema,
                 table_type=TableType.EXTERNAL,
                 file_type=file_type,
-                columns=columns,
+                columns=random_df_cols,
                 storage_location=filepath,
             )
         )
@@ -244,6 +212,7 @@ def test_partitioned_dataframe_operations(
     client: UCClient,
     random_df: Callable[[], pl.DataFrame],
     random_partitioned_df: Callable[[], pl.DataFrame],
+    random_partitioned_df_cols: list[Column],
     file_type: FileType,
 ):
     assert client.health_check()
@@ -260,54 +229,7 @@ def test_partitioned_dataframe_operations(
                 filepath = tmpdir
             case _:
                 raise NotImplementedError
-        columns = [
-            Column(
-                name="id",
-                data_type=DataType.STRING,
-                position=0,
-                nullable=False,
-            ),
-            Column(
-                name="ints",
-                data_type=DataType.LONG,
-                position=1,
-                nullable=False,
-            ),
-            Column(
-                name="floats",
-                data_type=DataType.DOUBLE,
-                position=2,
-                nullable=False,
-            ),
-            Column(
-                name="decimals",
-                data_type=DataType.DECIMAL,
-                type_precision=10,
-                type_scale=5,
-                position=3,
-                nullable=False,
-            ),
-            Column(
-                name="strings",
-                data_type=DataType.STRING,
-                position=4,
-                nullable=False,
-            ),
-            Column(
-                name="part1",
-                data_type=DataType.LONG,
-                position=5,
-                nullable=False,
-                partition_index=0,
-            ),
-            Column(
-                name="part2",
-                data_type=DataType.LONG,
-                position=6,
-                nullable=False,
-                partition_index=1,
-            ),
-        ]
+
         client.create_table(
             Table(
                 name=table_name,
@@ -315,7 +237,7 @@ def test_partitioned_dataframe_operations(
                 schema_name=default_schema,
                 table_type=TableType.EXTERNAL,
                 file_type=file_type,
-                columns=columns,
+                columns=random_partitioned_df_cols,
                 storage_location=filepath,
             )
         )
@@ -546,10 +468,23 @@ def test_create_as_table(
         assert_frame_equal(df, df_read, check_row_order=False)
 
 
+@pytest.mark.parametrize(
+    "file_type,partitioned",
+    [
+        (FileType.DELTA, False),
+        (FileType.PARQUET, False),
+        (FileType.DELTA, True),
+        (FileType.PARQUET, True),
+        (FileType.CSV, False),
+        (FileType.AVRO, False),
+    ],
+)
 def test_register_as_table(
     client: UCClient,
     random_df: Callable[[], pl.DataFrame],
     random_partitioned_df: Callable[[], pl.DataFrame],
+    file_type: FileType,
+    partitioned: bool,
 ):
     assert client.health_check()
 
@@ -557,177 +492,63 @@ def test_register_as_table(
     default_schema = "default"
     table_name = "test_table"
 
-    # Non-partitioned delta
     with tempfile.TemporaryDirectory() as tmpdir:
-        df = random_df()
-        df.write_delta(target=tmpdir)
-
-        client.register_as_table(
-            filepath=tmpdir,
-            catalog=default_catalog,
-            schema=default_schema,
-            name=table_name + "np-delta",
-            file_type="delta",
-        )
-        table = client.get_table(
-            catalog=default_catalog,
-            schema=default_schema,
-            table=table_name + "np-delta",
-        )
-        assert (
-            len([col for col in table.columns if col.partition_index is not None]) == 0
-        )
-
-        df_read = client.read_table(
-            catalog=default_catalog, schema=default_schema, name=table_name + "np-delta"
-        )
-        assert_frame_equal(df, df_read, check_row_order=False)
-
-    # Partitioned delta
-    with tempfile.TemporaryDirectory() as tmpdir:
-        df = random_partitioned_df()
-        df.write_delta(
-            target=tmpdir, delta_write_options={"partition_by": ["part1", "part2"]}
-        )
-
-        client.register_as_table(
-            filepath=tmpdir,
-            catalog=default_catalog,
-            schema=default_schema,
-            name=table_name + "p-delta",
-            file_type="delta",
-            partition_cols=["part1", "part2"],
-        )
-        table = client.get_table(
-            catalog=default_catalog, schema=default_schema, table=table_name + "p-delta"
-        )
-        assert (
-            len([col for col in table.columns if col.partition_index is not None]) == 2
-        )
-
-        df_read = client.read_table(
-            catalog=default_catalog, schema=default_schema, name=table_name + "p-delta"
-        )
-        assert_frame_equal(df, df_read, check_row_order=False)
-
-    # Non-partitioned parquet
-    with tempfile.TemporaryDirectory() as tmpdir:
-        filepath = os.path.join(tmpdir, "safvlsdv.parquet")
-        df = random_df()
-        df.write_parquet(file=filepath)
+        match file_type, partitioned:
+            case FileType.DELTA, False:
+                filepath = tmpdir
+                df = random_df()
+                df.write_delta(target=tmpdir)
+            case FileType.DELTA, True:
+                filepath = tmpdir
+                df = random_partitioned_df()
+                df.write_delta(
+                    target=tmpdir,
+                    delta_write_options={"partition_by": ["part1", "part2"]},
+                )
+            case FileType.PARQUET, False:
+                filepath = os.path.join(tmpdir, "safvlsdv.parquet")
+                df = random_df()
+                df.write_parquet(file=filepath)
+            case FileType.PARQUET, True:
+                filepath = tmpdir
+                df = random_partitioned_df()
+                df.write_parquet(
+                    file=tmpdir,
+                    use_pyarrow=True,
+                    pyarrow_options={
+                        "partition_cols": ["part1", "part2"],
+                    },
+                )
+            case FileType.CSV, False:
+                filepath = os.path.join(tmpdir, "sgvsavdavsdsvd.csv")
+                df = random_df().cast({"decimals": pl.Float64})
+                df.write_csv(file=filepath)
+            case FileType.AVRO, False:
+                filepath = os.path.join(tmpdir, "iuaevbaerv.avro")
+                df = random_df()
+                df.write_avro(file=filepath)
 
         client.register_as_table(
             filepath=filepath,
             catalog=default_catalog,
             schema=default_schema,
-            name=table_name + "np-parquet",
-            file_type="parquet",
+            name=table_name,
+            file_type=file_type,
+            partition_cols=None if not partitioned else ["part1", "part2"],
         )
+
         table = client.get_table(
             catalog=default_catalog,
             schema=default_schema,
-            table=table_name + "np-parquet",
+            table=table_name,
         )
         assert (
             len([col for col in table.columns if col.partition_index is not None]) == 0
+            if not partitioned
+            else 2
         )
 
         df_read = client.read_table(
-            catalog=default_catalog,
-            schema=default_schema,
-            name=table_name + "np-parquet",
-        )
-        assert_frame_equal(df, df_read, check_row_order=False)
-
-    # Partitioned delta
-    with tempfile.TemporaryDirectory() as tmpdir:
-        df = random_partitioned_df()
-        df.write_parquet(
-            file=tmpdir,
-            use_pyarrow=True,
-            pyarrow_options={
-                "partition_cols": ["part1", "part2"],
-            },
-        )
-
-        client.register_as_table(
-            filepath=tmpdir,
-            catalog=default_catalog,
-            schema=default_schema,
-            name=table_name + "p-parquet",
-            file_type="parquet",
-            partition_cols=["part1", "part2"],
-        )
-        table = client.get_table(
-            catalog=default_catalog,
-            schema=default_schema,
-            table=table_name + "p-parquet",
-        )
-        assert (
-            len([col for col in table.columns if col.partition_index is not None]) == 2
-        )
-
-        df_read = client.read_table(
-            catalog=default_catalog,
-            schema=default_schema,
-            name=table_name + "p-parquet",
-        )
-        assert_frame_equal(df, df_read, check_row_order=False)
-
-    # CSV
-    with tempfile.TemporaryDirectory() as tmpdir:
-        filepath = os.path.join(tmpdir, "sgvsavdavsdsvd.csv")
-        df = random_df().cast({"decimals": pl.Float64})
-        df.write_csv(file=filepath)
-
-        client.register_as_table(
-            filepath=filepath,
-            catalog=default_catalog,
-            schema=default_schema,
-            name=table_name + "csv",
-            file_type="csv",
-        )
-        table = client.get_table(
-            catalog=default_catalog,
-            schema=default_schema,
-            table=table_name + "csv",
-        )
-        assert (
-            len([col for col in table.columns if col.partition_index is not None]) == 0
-        )
-
-        df_read = client.read_table(
-            catalog=default_catalog,
-            schema=default_schema,
-            name=table_name + "csv",
-        )
-        assert_frame_equal(df, df_read, check_row_order=False)
-
-    # AVRO
-    with tempfile.TemporaryDirectory() as tmpdir:
-        filepath = os.path.join(tmpdir, "iuaevbaerv.avro")
-        df = random_df()
-        df.write_avro(file=filepath)
-
-        client.register_as_table(
-            filepath=filepath,
-            catalog=default_catalog,
-            schema=default_schema,
-            name=table_name + "avro",
-            file_type="avro",
-        )
-        table = client.get_table(
-            catalog=default_catalog,
-            schema=default_schema,
-            table=table_name + "avro",
-        )
-        assert (
-            len([col for col in table.columns if col.partition_index is not None]) == 0
-        )
-
-        df_read = client.read_table(
-            catalog=default_catalog,
-            schema=default_schema,
-            name=table_name + "avro",
+            catalog=default_catalog, schema=default_schema, name=table_name
         )
         assert_frame_equal(df, df_read, check_row_order=False)
