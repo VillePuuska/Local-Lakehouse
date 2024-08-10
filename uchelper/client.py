@@ -282,7 +282,7 @@ class UCClient:
         name: str,
         mode: Literal["append", "overwrite"] | WriteMode = WriteMode.APPEND,
         schema_evolution: (
-            Literal["strict", "union", "overwrite"] | SchemaEvolution
+            Literal["strict", "merge", "overwrite"] | SchemaEvolution
         ) = SchemaEvolution.STRICT,
     ) -> None:
         """
@@ -298,7 +298,7 @@ class UCClient:
 
         `schema_evolution` specifies how to handle possible schema mismatches:
             - SchemaEvolution.STRICT raises an Exception if there is a difference in schemas.
-            - SchemaEvolution.UNION will attempt to take the union of the schemas; raises if impossible.
+            - SchemaEvolution.MERGE will attempt to merge the schemas; raises if impossible.
             - SchemaEvolution.OVERWRITE will attempt to cast the existing table to the schema of the new
               DataFrame; raises if impossible.
         """

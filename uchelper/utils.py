@@ -47,13 +47,13 @@ def literal_to_writemode(lit: Literal["append", "overwrite"]) -> WriteMode:
 
 
 def literal_to_schemaevolution(
-    lit: Literal["strict", "union", "overwrite"]
+    lit: Literal["strict", "merge", "overwrite"]
 ) -> SchemaEvolution:
     match lit:
         case "strict":
             return SchemaEvolution.STRICT
-        case "union":
-            return SchemaEvolution.UNION
+        case "merge":
+            return SchemaEvolution.MERGE
         case "overwrite":
             return SchemaEvolution.OVERWRITE
         case _:
