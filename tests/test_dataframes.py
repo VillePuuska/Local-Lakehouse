@@ -350,6 +350,15 @@ def test_partitioned_dataframe_operations(
         assert modified_col.data_type == DataType.LONG
         assert modified_col.position == 1
 
+        partition_cols = sorted(
+            [
+                (col.partition_index, col.name)
+                for col in table.columns
+                if col.partition_index is not None
+            ]
+        )
+        assert partition_cols == [(0, "part1"), (1, "part2")]
+
         client.write_table(
             df5,
             catalog=default_catalog,
@@ -365,6 +374,15 @@ def test_partitioned_dataframe_operations(
         modified_col = [col for col in table.columns if col.name == "ints"][0]
         assert modified_col.data_type == DataType.STRING
         assert modified_col.position == 1
+
+        partition_cols = sorted(
+            [
+                (col.partition_index, col.name)
+                for col in table.columns
+                if col.partition_index is not None
+            ]
+        )
+        assert partition_cols == [(0, "part1"), (1, "part2")]
 
         assert_frame_equal(
             df5,
@@ -552,3 +570,81 @@ def test_register_as_table(
             catalog=default_catalog, schema=default_schema, name=table_name
         )
         assert_frame_equal(df, df_read, check_row_order=False)
+
+
+@pytest.mark.parametrize(
+    "partitioned",
+    [True, False],
+)
+def test_write_delta_table_merge_schema(
+    client: UCClient,
+    random_df: Callable[[], pl.DataFrame],
+    random_df_cols: list[Column],
+    random_partitioned_df: Callable[[], pl.DataFrame],
+    random_partitioned_df_cols: list[Column],
+    partitioned: bool,
+):
+    assert client.health_check()
+
+    default_catalog = "unity"
+    default_schema = "default"
+    table_name = "test_table"
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        if not partitioned:
+            df = random_df()
+            df2 = (
+                random_df()
+                .cast({"floats": pl.String})
+                .rename({"floats": "more_strings"})
+            )
+            partition_cols = None
+            cols = random_df_cols
+        else:
+            df = random_partitioned_df()
+            df2 = (
+                random_partitioned_df()
+                .cast({"floats": pl.String})
+                .rename({"floats": "more_strings"})
+            )
+            partition_cols = ["part1", "part2"]
+            cols = random_partitioned_df_cols
+
+        client.create_as_table(
+            df=df,
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name,
+            file_type="delta",
+            table_type="external",
+            location="file://" + tmpdir,
+            partition_cols=partition_cols,
+        )
+
+        client.write_table(
+            df=df2,
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name,
+            mode="append",
+            schema_evolution="merge",
+        )
+
+        df_read = client.read_table(
+            catalog=default_catalog, schema=default_schema, name=table_name
+        )
+        assert_frame_equal(
+            pl.concat([df, df2], how="diagonal"),
+            df_read,
+            check_column_order=False,
+            check_row_order=False,
+        )
+
+        table = client.get_table(
+            catalog=default_catalog, schema=default_schema, table=table_name
+        )
+        assert set(
+            (col.name, col.data_type, col.partition_index) for col in cols
+        ).union(set([("more_strings", DataType.STRING, None)])) == set(
+            (col.name, col.data_type, col.partition_index) for col in table.columns
+        )

@@ -62,10 +62,19 @@ def polars_type_to_uc_type(t: pl.DataType) -> tuple[DataType, int, int]:
     return (DataType.NULL, 0, 0)
 
 
-def df_schema_to_uc_schema(df: pl.DataFrame | pl.LazyFrame) -> list[Column]:
+def df_schema_to_uc_schema(
+    df: pl.DataFrame | pl.LazyFrame, partition_cols: list[str] = []
+) -> list[Column]:
     res = []
-    for i, (col_name, col_type) in enumerate(df.schema.items()):
+    if isinstance(df, pl.DataFrame):
+        schema = df.schema
+    elif isinstance(df, pl.LazyFrame):
+        schema = df.collect_schema()
+    for i, (col_name, col_type) in enumerate(schema.items()):
         t = polars_type_to_uc_type(col_type)
+        partition_ind = None
+        if col_name in partition_cols:
+            partition_ind = partition_cols.index(col_name)
         res.append(
             Column(
                 name=col_name,
@@ -74,6 +83,7 @@ def df_schema_to_uc_schema(df: pl.DataFrame | pl.LazyFrame) -> list[Column]:
                 type_scale=t[2],
                 position=i,
                 nullable=True,
+                partition_index=partition_ind,
             )
         )
     return res
@@ -124,6 +134,8 @@ def uc_schema_to_df_schema(cols: list[Column]) -> dict[str, pl.DataType]:
 
 
 def check_schema_equality(left: list[Column], right: list[Column]) -> bool:
+    if len(left) != len(right):
+        return False
     left = sorted(left, key=lambda x: x.position)
     right = sorted(right, key=lambda x: x.position)
     for left_col, right_col in zip(left, right):
@@ -306,10 +318,42 @@ def write_table(
                 raise_for_schema_mismatch(df=df, uc=table.columns)
                 return None
             except SchemaMismatchError:
-                return df_schema_to_uc_schema(df=df)
+                return df_schema_to_uc_schema(
+                    df=df, partition_cols=[col.name for col in partition_cols]
+                )
 
         case FileType.DELTA, WriteMode.APPEND, SchemaEvolution.MERGE:
-            raise NotImplementedError
+            partition_cols = get_partition_columns(table.columns)
+            # needing to specify the cast is not neat,
+            # but mypy gets angry if we just pass this as a str to write_delta
+            write_mode = cast(Literal["append", "overwrite"], mode.value.lower())
+            if len(partition_cols) > 0:
+                df.write_delta(
+                    target=path,
+                    mode=write_mode,
+                    delta_write_options={
+                        "partition_by": [col.name for col in partition_cols],
+                        "schema_mode": "merge",
+                        "engine": "rust",
+                    },
+                )
+            else:
+                df.write_delta(
+                    target=path,
+                    mode=write_mode,
+                    delta_write_options={
+                        "schema_mode": "merge",
+                        "engine": "rust",
+                    },
+                )
+            try:
+                lf = pl.scan_delta(source=path)
+                raise_for_schema_mismatch(df=lf, uc=table.columns)
+                return None
+            except SchemaMismatchError:
+                return df_schema_to_uc_schema(
+                    df=lf, partition_cols=[col.name for col in partition_cols]
+                )
 
         case FileType.PARQUET, WriteMode.APPEND, SchemaEvolution.STRICT:
             partition_cols = get_partition_columns(table.columns)
@@ -352,7 +396,9 @@ def write_table(
                 raise_for_schema_mismatch(df=df, uc=table.columns)
                 return None
             except SchemaMismatchError:
-                return df_schema_to_uc_schema(df=df)
+                return df_schema_to_uc_schema(
+                    df=df, partition_cols=[col.name for col in partition_cols]
+                )
 
         case FileType.CSV, WriteMode.OVERWRITE, SchemaEvolution.STRICT:
             raise_for_schema_mismatch(df=df, uc=table.columns)
