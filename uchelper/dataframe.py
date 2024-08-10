@@ -287,11 +287,18 @@ def write_table(
                     target=path,
                     mode=write_mode,
                     delta_write_options={
-                        "partition_by": [col.name for col in partition_cols]
+                        "partition_by": [col.name for col in partition_cols],
+                        "engine": "rust",
                     },
                 )
             else:
-                df.write_delta(target=path, mode=write_mode)
+                df.write_delta(
+                    target=path,
+                    mode=write_mode,
+                    delta_write_options={
+                        "engine": "rust",
+                    },
+                )
             return None
 
         case FileType.DELTA, WriteMode.OVERWRITE, _:
@@ -306,13 +313,17 @@ def write_table(
                     delta_write_options={
                         "partition_by": [col.name for col in partition_cols],
                         "schema_mode": "overwrite",
+                        "engine": "rust",
                     },
                 )
             else:
                 df.write_delta(
                     target=path,
                     mode=write_mode,
-                    delta_write_options={"schema_mode": "overwrite"},
+                    delta_write_options={
+                        "schema_mode": "overwrite",
+                        "engine": "rust",
+                    },
                 )
             try:
                 raise_for_schema_mismatch(df=df, uc=table.columns)
