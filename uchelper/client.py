@@ -188,8 +188,8 @@ class UCClient:
             - properties.
         Returns a Schema with updated information.
         Raises a DoesNotExistError if the schema does not exist.
-        Raises an AlreadyExistsError if the new name is the same as the old name. Unity Catalog
-        does not allow updating and keeping the same name atm.
+        Raises an AlreadyExistsError if there already exists a schema with the new name
+        in the same catalog.
         """
         return update_schema(
             uc_url=self.uc_url,
