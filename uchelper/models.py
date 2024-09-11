@@ -12,7 +12,7 @@ class Catalog(BaseModel):
 
     name: str
     comment: str | None = None
-    properties: dict[str, str] = {}
+    properties: dict[str, str] | None = {}
     created_at: datetime.datetime | None = None
     updated_at: datetime.datetime | None = None
     id: uuid.UUID | None = None
@@ -25,8 +25,8 @@ class Schema(BaseModel):
 
     name: str
     catalog_name: str
-    comment: str | None = ""  # UC doesn't update a null comment properly so default ""
-    properties: dict[str, str] = {}
+    comment: str | None = None
+    properties: dict[str, str] | None = {}
     full_name: str | None = None
     created_at: datetime.datetime | None = None
     updated_at: datetime.datetime | None = None
@@ -92,8 +92,8 @@ class Column(BaseModel):
     data_type: DataType = Field(
         validation_alias="type_name", serialization_alias="type_name"
     )
-    type_precision: int = 0  # TODO: handle this
-    type_scale: int = 0  # TODO: handle this
+    type_precision: int = 0
+    type_scale: int = 0
     type_interval_type: int | None = None
     position: int
     comment: str | None = None
@@ -180,7 +180,7 @@ class Table(BaseModel):
     columns: list[Column]
     storage_location: str | None = None
     comment: str | None = None
-    properties: dict[str, str] = {}
+    properties: dict[str, str] | None = {}
     created_at: datetime.datetime | None = None
     updated_at: datetime.datetime | None = None
     table_id: uuid.UUID | None = None

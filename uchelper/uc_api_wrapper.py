@@ -136,9 +136,6 @@ def list_catalogs(session: requests.Session, uc_url: str) -> list[Catalog]:
     catalogs = []
     token = None
 
-    # NOTE: GET /catalogs pagination is bugged atm,
-    # all catalogs are returned regardless of parameters
-    # and next_page_token is always null.
     while True:
         response = session.get(
             uc_url + api_path + catalogs_endpoint,
@@ -152,7 +149,7 @@ def list_catalogs(session: requests.Session, uc_url: str) -> list[Catalog]:
             ]
         )
         # according to API spec, token should be null when there are no more pages,
-        # but at least some endpoints are bugged and return "" instead of null
+        # but at least some endpoints have been bugged and returned "" instead of null
         if token is None or token == "":
             break
 
@@ -281,8 +278,6 @@ def list_schemas(session: requests.Session, uc_url: str, catalog: str) -> list[S
     schemas = []
     token = None
 
-    # NOTE: listCatalogs pagination is not implemented in Unity Catalog yet
-    # so this handling of pagination is not actually needed atm.
     while True:
         response = session.get(
             url,
@@ -321,14 +316,14 @@ def update_schema(
         - properties.
     Returns a Schema with updated information.
     Raises a DoesNotExistError if the schema does not exist.
-    Raises an AlreadyExistsError if the new name is the same as the old name. Unity Catalog
-    does not allow updating and keeping the same name atm.
+    Raises an AlreadyExistsError if there already exists a schema with the new name
+    in the same catalog.
     """
     url = uc_url + api_path + schemas_endpoint + "/" + catalog + "." + schema_name
     data = {
         "comment": new_schema.comment,
         "properties": new_schema.properties,
-        "new_name": new_schema.name,
+        "new_name": (new_schema.name if new_schema.name != schema_name else None),
     }
     response = session.patch(url=url, data=json.dumps(data), headers=JSON_HEADER)
 
@@ -376,7 +371,7 @@ def create_table(session: requests.Session, uc_url: str, table: Table) -> Table:
 
 def delete_table(
     session: requests.Session, uc_url: str, catalog: str, schema: str, table: str
-):
+) -> None:
     """
     Deletes the table.
     Raises a DoesNotExistError if the table did not exist.

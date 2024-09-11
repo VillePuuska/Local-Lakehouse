@@ -22,14 +22,17 @@ def test_catalogs_endpoint(client: UCClient):
 
     cat_name = "asdasdasdasfdsadgsa"
     cat_comment = "asd"
+    cat_properties = {"prop1": "val1", "property 2": "foo bar"}
     catalog = Catalog(
         name=cat_name,
         comment=cat_comment,
+        properties=cat_properties,
     )
 
     cat_name_update = "asdgnlsavnsadn"
     cat_comment_update = "ayo"
-    catalog_update = Catalog(name=cat_name_update)
+    cat_properties_update = {"prop new": "asddfg"}
+    catalog_update = Catalog(name=cat_name_update, properties=cat_properties_update)
     catalog_update2 = Catalog(name=cat_name_update, comment=cat_comment_update)
 
     # At start, there is only the default catalog; verify this
@@ -48,6 +51,7 @@ def test_catalogs_endpoint(client: UCClient):
     cat = client.create_catalog(catalog)
     assert cat.name == cat_name
     assert cat.comment == cat_comment
+    assert cat.properties == cat_properties
     assert cat.id is not None
 
     assert len(client.list_catalogs()) == 2
@@ -64,11 +68,12 @@ def test_catalogs_endpoint(client: UCClient):
     with pytest.raises(AlreadyExistsError):
         client.update_catalog(default_catalog, catalog)
 
-    # Update the catalog name; verify it was updated and the old catalog does not exist
+    # Update the catalog name and properties; verify it was updated and the old catalog does not exist
 
     cat = client.update_catalog(cat_name, catalog_update)
     assert cat.name == cat_name_update
     assert cat.comment == cat_comment
+    assert cat.properties == cat_properties_update
 
     assert len(client.list_catalogs()) == 2
 
@@ -78,11 +83,13 @@ def test_catalogs_endpoint(client: UCClient):
         client.delete_catalog(cat_name, False)
     assert len(client.list_catalogs()) == 2
 
-    # Update just the comment but not the name; this used to be impossible due to a UC bug
+    # Update just the comment but not the name or properties;
+    # updating without changing the name used to be impossible due to a UC bug
 
     cat = client.update_catalog(cat_name_update, catalog_update2)
     assert cat.name == cat_name_update
     assert cat.comment == cat_comment_update
+    assert cat.properties == cat_properties_update
 
     # Delete the updated catalog; verify it actually gets deleted and we cannot "re-delete" it
 
@@ -107,16 +114,27 @@ def test_schemas_endpoint(client: UCClient):
 
     new_schema_name = "asdasdasdasfdsadgsa"
     new_schema_comment = "asd"
+    new_schema_properties = {"prop1": "val1", "property 2": "foo bar"}
     new_schema = Schema(
         name=new_schema_name,
         catalog_name=default_catalog,
         comment=new_schema_comment,
+        properties=new_schema_properties,
     )
 
     schema_name_update = "asdgnlsavnsadn"
+    schema_properties_update = {"prop new": "asddfg"}
     schema_update = Schema(
         name=schema_name_update,
         catalog_name=default_catalog,
+        properties=schema_properties_update,
+    )
+
+    schema_comment_update = "dddddddd"
+    schema_update2 = Schema(
+        name=schema_name_update,
+        catalog_name=default_catalog,
+        comment=schema_comment_update,
     )
 
     # Initially, there is only the default schema; verify this
@@ -149,6 +167,7 @@ def test_schemas_endpoint(client: UCClient):
     schema = client.create_schema(schema=new_schema)
     assert schema.full_name == default_catalog + "." + new_schema_name
     assert schema.comment == new_schema_comment
+    assert schema.properties == new_schema_properties
     assert schema.created_at is not None
     assert schema.updated_at is None
     assert schema.schema_id is not None
@@ -159,13 +178,6 @@ def test_schemas_endpoint(client: UCClient):
     schemas = client.list_schemas(catalog=default_catalog)
     assert len(schemas) == 2
 
-    with pytest.raises(AlreadyExistsError):
-        client.update_schema(
-            catalog=default_catalog,
-            schema_name=new_schema_name,
-            new_schema=new_schema,
-        )
-
     with pytest.raises(DoesNotExistError):
         client.update_schema(
             catalog=default_catalog,
@@ -173,7 +185,7 @@ def test_schemas_endpoint(client: UCClient):
             new_schema=schema_update,
         )
 
-    # Update the schema; verify the schema was updated and the old schema does not exist
+    # Update the schema name and properties; verify the schema was updated and the old schema does not exist
 
     schema = client.update_schema(
         catalog=default_catalog,
@@ -181,8 +193,20 @@ def test_schemas_endpoint(client: UCClient):
         new_schema=schema_update,
     )
     assert schema.full_name == default_catalog + "." + schema_name_update
-    # Default comment set to "" since UC does not clear comment if the new comment is null
-    assert schema.comment == ""
+    assert schema.comment == new_schema_comment  # comment was not changed
+    assert schema.properties == schema_properties_update
+    assert schema.updated_at is not None
+
+    # Update only the comment; verify the schema was updated and the old schema does not exist
+
+    schema = client.update_schema(
+        catalog=default_catalog,
+        schema_name=schema_name_update,
+        new_schema=schema_update2,
+    )
+    assert schema.full_name == default_catalog + "." + schema_name_update  # unchanged
+    assert schema.comment == schema_comment_update
+    assert schema.properties == schema_properties_update  # unchanged
     assert schema.updated_at is not None
 
     with pytest.raises(DoesNotExistError):
