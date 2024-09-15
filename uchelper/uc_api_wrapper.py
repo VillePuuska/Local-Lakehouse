@@ -439,3 +439,51 @@ def list_tables(
             break
 
     return tables
+
+
+def overwrite_table(session: requests.Session, uc_url: str, table: Table) -> Table:
+    """
+    Overwrites a table with the following fields specified in the parameter `table`:
+        - name,
+        - catalog_name,
+        - schema_name,
+        - table_type,
+        - file_type,
+        - columns,
+        - storage_location (for EXTERNAL tables),
+        - comment,
+        - properties.
+    Returns a new Table with the remaining fields populated.
+    Raises a DoesNotExistException if the table does not already exist.
+    """
+    original_table = None
+    try:
+        original_table = get_table(
+            session=session,
+            uc_url=uc_url,
+            catalog=table.catalog_name,
+            schema=table.schema_name,
+            table=table.name,
+        )
+        delete_table(
+            session=session,
+            uc_url=uc_url,
+            catalog=table.catalog_name,
+            schema=table.schema_name,
+            table=table.name,
+        )
+    except DoesNotExistError as e:
+        raise DoesNotExistError(
+            "Can't overwrite a table that does not exist. Use create_table instead."
+        ) from e
+    except Exception as e:
+        raise Exception(
+            "Something went horribly wrong. Failed when deleting existing table."
+        ) from e
+
+    try:
+        return create_table(session=session, uc_url=uc_url, table=table)
+    except Exception as e:
+        if original_table is not None:
+            create_table(session=session, uc_url=uc_url, table=original_table)
+        raise Exception("Creating new table failed.") from e

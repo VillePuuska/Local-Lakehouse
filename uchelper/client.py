@@ -28,6 +28,7 @@ from .uc_api_wrapper import (
     list_tables,
     update_catalog,
     update_schema,
+    overwrite_table,
 )
 from .utils import (
     literal_to_filetype,
@@ -312,9 +313,8 @@ class UCClient:
         )
         if new_columns is not None:
             try:
-                self.delete_table(catalog=catalog, schema=schema, table=name)
                 table.columns = new_columns
-                self.create_table(table=table)
+                overwrite_table(session=self.session, uc_url=self.uc_url, table=table)
             except Exception as e:
                 raise Exception("Something went horribly wrong.") from e
 
