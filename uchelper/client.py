@@ -30,6 +30,7 @@ from .uc_api_wrapper import (
     update_schema,
     overwrite_table,
     update_table,
+    set_table_default_merge_columns,
 )
 from .utils import (
     literal_to_filetype,
@@ -279,9 +280,26 @@ class UCClient:
             table=table,
         )
 
-    def set_table_default_merge_columns(self) -> None:
-        # TODO
-        raise NotImplementedError
+    def set_table_default_merge_columns(
+        self,
+        catalog: str,
+        schema: str,
+        table: str,
+        merge_columns: list[str],
+    ) -> Table:
+        """
+        Updates the default merge columns for the table.
+        Returns a Table with updated information.
+        Raises a DoesNotExistError if the table does not exist.
+        """
+        return set_table_default_merge_columns(
+            session=self.session,
+            uc_url=self.uc_url,
+            catalog=catalog,
+            schema=schema,
+            table=table,
+            merge_columns=merge_columns,
+        )
 
     def read_table(self, catalog: str, schema: str, name: str) -> pl.DataFrame:
         """

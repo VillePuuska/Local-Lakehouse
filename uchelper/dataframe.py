@@ -169,6 +169,11 @@ def get_partition_columns(cols: list[Column]) -> list[Column]:
     return sorted(partition_cols, key=lambda x: x.partition_index)  # type: ignore
 
 
+def get_merge_condition() -> str:
+    # TODO
+    raise NotImplementedError
+
+
 def read_table(table: Table) -> pl.DataFrame:
     path = table.storage_location
     assert path is not None
@@ -456,3 +461,8 @@ def write_table(
             raise UnsupportedOperationError(
                 f"Unsupported parameters: {table.file_type}, {mode}, {schema_evolution}"
             )
+
+
+def merge_table() -> None:
+    # TODO
+    raise NotImplementedError

@@ -514,6 +514,36 @@ def overwrite_table(session: requests.Session, uc_url: str, table: Table) -> Tab
         raise Exception("Creating new table failed.") from e
 
 
-def set_table_default_merge_columns() -> None:
-    # TODO
-    raise NotImplementedError
+def set_table_default_merge_columns(
+    session: requests.Session,
+    uc_url: str,
+    catalog: str,
+    schema: str,
+    table: str,
+    merge_columns: list[str],
+) -> Table:
+    """
+    Updates the default merge columns for the table.
+    Returns a Table with updated information.
+    Raises a DoesNotExistError if the table does not exist.
+    """
+    existing_table = get_table(
+        session=session, uc_url=uc_url, catalog=catalog, schema=schema, table=table
+    )
+    for col in merge_columns:
+        if col not in [c.name for c in existing_table.columns]:
+            raise Exception(
+                f"Can't set {col} as a merge column since it is not a column of the table!"
+            )
+    if existing_table.properties is None:
+        existing_table.properties = {}
+    existing_table.properties[TABLE_DEFAULT_MERGE_COLUMNS_PROPERTY_KEY] = ";".join(
+        merge_columns
+    )
+    return update_table(
+        session=session,
+        uc_url=uc_url,
+        catalog=catalog,
+        schema=schema,
+        table=existing_table,
+    )

@@ -5,6 +5,11 @@ import uuid
 import json
 
 
+TABLE_DEFAULT_MERGE_COLUMNS_PROPERTY_KEY = (
+    "uchelper_default_merge_columns_field_donottouch"
+)
+
+
 class Catalog(BaseModel):
     """
     Holds all metadata for a catalog in Unity Catalog.
@@ -188,3 +193,22 @@ class Table(BaseModel):
     model_config = ConfigDict(
         populate_by_name=True,
     )
+
+    @computed_field  # type: ignore[misc]
+    @property
+    def default_merge_columns(self) -> list[str]:
+        if (
+            self.properties is None
+            or TABLE_DEFAULT_MERGE_COLUMNS_PROPERTY_KEY not in self.properties
+            or self.properties[TABLE_DEFAULT_MERGE_COLUMNS_PROPERTY_KEY] == ""
+        ):
+            return []
+        merge_cols = self.properties[TABLE_DEFAULT_MERGE_COLUMNS_PROPERTY_KEY].split(
+            ";"
+        )
+        for col in merge_cols:
+            if col not in [c.name for c in self.columns]:
+                raise Exception(
+                    "Broken metadata: table has default_merge_column that is not a column in the table."
+                )
+        return merge_cols

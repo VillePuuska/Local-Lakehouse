@@ -402,6 +402,42 @@ def test_tables_endpoint(client: UCClient):
 
     assert_table_matches(client, update_table_props)
 
+    # Test getting and setting default merge columns for a table
+
+    assert update_table_props.default_merge_columns == []
+
+    with pytest.raises(Exception):
+        client.set_table_default_merge_columns(
+            catalog=default_catalog,
+            schema=default_schema,
+            table=update_table_props.name,
+            merge_columns=["col1", "column3"],
+        )
+
+    updated_table_merge_cols = client.set_table_default_merge_columns(
+        catalog=default_catalog,
+        schema=default_schema,
+        table=update_table_props.name,
+        merge_columns=["col1", "col2"],
+    )
+    assert updated_table_merge_cols.default_merge_columns == ["col1", "col2"]
+
+    updated_table_merge_cols = client.set_table_default_merge_columns(
+        catalog=default_catalog,
+        schema=default_schema,
+        table=update_table_props.name,
+        merge_columns=["col1"],
+    )
+    assert updated_table_merge_cols.default_merge_columns == ["col1"]
+
+    updated_table_merge_cols = client.set_table_default_merge_columns(
+        catalog=default_catalog,
+        schema=default_schema,
+        table=update_table_props.name,
+        merge_columns=[],
+    )
+    assert updated_table_merge_cols.default_merge_columns == []
+
     # Delete the table we created and verify it gets deleted
 
     client.delete_table(default_catalog, default_schema, new_external_table.name)
