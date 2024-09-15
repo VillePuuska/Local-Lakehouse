@@ -441,6 +441,31 @@ def list_tables(
     return tables
 
 
+def update_table(
+    session: requests.Session,
+    uc_url: str,
+    catalog: str,
+    schema: str,
+    table: Table,
+) -> Table:
+    """
+    Updates the table with the given name in the given catalog and schema
+    with the following fields from `table`:
+        - comment,
+        - properties.
+    Returns a Table with updated information.
+    Raises a DoesNotExistError if the table does not exist.
+    """
+    existing_table = get_table(
+        session=session, uc_url=uc_url, catalog=catalog, schema=schema, table=table.name
+    )
+    if table.comment is not None:
+        existing_table.comment = table.comment
+    if table.properties is not None:
+        existing_table.properties = table.properties
+    return overwrite_table(session=session, uc_url=uc_url, table=existing_table)
+
+
 def overwrite_table(session: requests.Session, uc_url: str, table: Table) -> Table:
     """
     Overwrites a table with the following fields specified in the parameter `table`:
@@ -487,3 +512,8 @@ def overwrite_table(session: requests.Session, uc_url: str, table: Table) -> Tab
         if original_table is not None:
             create_table(session=session, uc_url=uc_url, table=original_table)
         raise Exception("Creating new table failed.") from e
+
+
+def set_table_default_merge_columns() -> None:
+    # TODO
+    raise NotImplementedError

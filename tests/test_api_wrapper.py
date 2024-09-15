@@ -268,6 +268,8 @@ def test_tables_endpoint(client: UCClient):
                 nullable=False,
             ),
         ],
+        comment="External table",
+        properties={"key1": "value1", "key2": "value2"},
     )
 
     default_managed_table = Table(
@@ -296,6 +298,8 @@ def test_tables_endpoint(client: UCClient):
                 nullable=True,
             ),
         ],
+        comment="Managed table",
+        properties={"key1": "value1", "key2": "value2"},
     )
 
     tmpfilepath = tempfile.mkdtemp()
@@ -376,6 +380,28 @@ def test_tables_endpoint(client: UCClient):
 
     assert len(client.list_tables(catalog=default_catalog, schema=default_schema)) == 5
 
+    # Test updating comment and properties of the last new table
+
+    update_table_comment = created_table.model_copy(deep=True)
+    update_table_comment.properties = None
+    update_table_comment.comment = "avnpiavrn"
+    client.update_table(
+        catalog=default_catalog, schema=default_schema, table=update_table_comment
+    )
+    update_table_comment.properties = created_table.properties
+
+    assert_table_matches(client, update_table_comment)
+
+    update_table_props = created_table.model_copy(deep=True)
+    update_table_props.properties = {"asdgasb": "opauvrn", "1234": "foobar"}
+    update_table_props.comment = None
+    client.update_table(
+        catalog=default_catalog, schema=default_schema, table=update_table_props
+    )
+    update_table_props.comment = update_table_comment.comment
+
+    assert_table_matches(client, update_table_props)
+
     # Delete the table we created and verify it gets deleted
 
     client.delete_table(default_catalog, default_schema, new_external_table.name)
@@ -436,6 +462,8 @@ def assert_table_matches(client: UCClient, default_table: Table):
     assert table.schema_name == default_table.schema_name
     assert table.table_type == default_table.table_type
     assert table.file_type == default_table.file_type
+    assert table.comment == default_table.comment
+    assert table.properties == default_table.properties
 
     assert table.storage_location is not None and table.storage_location != ""
 

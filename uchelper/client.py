@@ -29,6 +29,7 @@ from .uc_api_wrapper import (
     update_catalog,
     update_schema,
     overwrite_table,
+    update_table,
 )
 from .utils import (
     literal_to_filetype,
@@ -261,6 +262,27 @@ class UCClient:
             session=self.session, uc_url=self.uc_url, catalog=catalog, schema=schema
         )
 
+    def update_table(self, catalog: str, schema: str, table: Table) -> Table:
+        """
+        Updates the table with the given name in the given catalog and schema
+        with the following fields from `table`:
+            - comment,
+            - properties.
+        Returns a Table with updated information.
+        Raises a DoesNotExistError if the table does not exist.
+        """
+        return update_table(
+            session=self.session,
+            uc_url=self.uc_url,
+            catalog=catalog,
+            schema=schema,
+            table=table,
+        )
+
+    def set_table_default_merge_columns(self) -> None:
+        # TODO
+        raise NotImplementedError
+
     def read_table(self, catalog: str, schema: str, name: str) -> pl.DataFrame:
         """
         Reads the specified table from Unity Catalog and returns it as a Polars DataFrame.
@@ -317,6 +339,10 @@ class UCClient:
                 overwrite_table(session=self.session, uc_url=self.uc_url, table=table)
             except Exception as e:
                 raise Exception("Something went horribly wrong.") from e
+
+    def merge_table(self) -> None:
+        # TODO
+        raise NotImplementedError
 
     def create_as_table(
         self,
