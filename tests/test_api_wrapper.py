@@ -1,5 +1,4 @@
 import tempfile
-import tempfile
 import pytest
 from uchelper import (
     UCClient,
@@ -13,6 +12,7 @@ from uchelper import (
     FileType,
     DataType,
 )
+from uchelper.uc_api_wrapper import overwrite_table
 
 
 def test_catalogs_endpoint(client: UCClient):
@@ -53,6 +53,9 @@ def test_catalogs_endpoint(client: UCClient):
     assert cat.comment == cat_comment
     assert cat.properties == cat_properties
     assert cat.id is not None
+    assert cat.created_at is not None
+    # NOTE: UC OSS PR #483 changed `updated_at` to be set when a catalog is first created
+    # assert cat.updated_at is None
 
     assert len(client.list_catalogs()) == 2
 
@@ -169,7 +172,8 @@ def test_schemas_endpoint(client: UCClient):
     assert schema.comment == new_schema_comment
     assert schema.properties == new_schema_properties
     assert schema.created_at is not None
-    assert schema.updated_at is None
+    # NOTE: UC OSS PR #483 changed `updated_at` to be set when a catalog is first created
+    # assert schema.updated_at is None
     assert schema.schema_id is not None
 
     with pytest.raises(AlreadyExistsError):
@@ -322,25 +326,7 @@ def test_tables_endpoint(client: UCClient):
     # Verify that two of the three default tables exist and get_table returns them
 
     for default_table in [default_external_table, default_managed_table]:
-        table = client.get_table(
-            catalog=default_catalog,
-            schema=default_schema,
-            table=default_table.name,
-        )
-        assert table.name == default_table.name
-        assert table.catalog_name == default_table.catalog_name
-        assert table.schema_name == default_table.schema_name
-        assert table.table_type == default_table.table_type
-        assert table.file_type == default_table.file_type
-
-        assert table.storage_location is not None and table.storage_location != ""
-
-        assert len(table.columns) == len(default_table.columns)
-        for i in range(len(table.columns)):
-            assert table.columns[i].name == default_table.columns[i].name
-            assert table.columns[i].data_type == default_table.columns[i].data_type
-            assert table.columns[i].position == default_table.columns[i].position
-            assert table.columns[i].nullable == default_table.columns[i].nullable
+        assert_table_matches(client, default_table)
 
     with pytest.raises(DoesNotExistError):
         client.get_table(
@@ -384,7 +370,8 @@ def test_tables_endpoint(client: UCClient):
     assert len(created_table.columns) == 2
     assert created_table.storage_location == new_external_table.storage_location
     assert created_table.created_at is not None
-    assert created_table.updated_at is None
+    # NOTE: UC OSS PR #483 changed `updated_at` to be set when a table is first created
+    # assert created_table.updated_at is None
     assert created_table.table_id is not None
 
     assert len(client.list_tables(catalog=default_catalog, schema=default_schema)) == 5
@@ -399,3 +386,62 @@ def test_tables_endpoint(client: UCClient):
 
     with pytest.raises(DoesNotExistError):
         client.delete_table(default_catalog, default_schema, new_external_table.name)
+
+
+def test_overwrite_table(client: UCClient):
+    assert client.health_check()
+
+    uc_url = client.uc_url
+    session = client.session
+
+    default_catalog = "unity"
+    default_schema = "default"
+
+    default_table = client.get_table(
+        catalog=default_catalog, schema=default_schema, table="numbers"
+    )
+
+    assert_table_matches(client, default_table)
+
+    with pytest.raises(DoesNotExistError):
+        nonexistent_table = default_table.model_copy(deep=True)
+        nonexistent_table.name = "this_table_really_shouldnt_exist"
+        overwrite_table(session=session, uc_url=uc_url, table=nonexistent_table)
+
+    assert_table_matches(client, default_table)
+
+    with pytest.raises(Exception):
+        broken_table = default_table.model_copy(deep=True)
+        broken_table.name = "this.name.will.fail"
+        overwrite_table(session=session, uc_url=uc_url, table=broken_table)
+
+    assert_table_matches(client, default_table)
+
+    new_table_col_comment = "sagdfasdgasdg"
+    new_table = default_table.model_copy(deep=True)
+    new_table.columns[0].comment = new_table_col_comment
+    overwrite_table(session=session, uc_url=uc_url, table=new_table)
+
+    assert_table_matches(client, new_table)
+
+
+def assert_table_matches(client: UCClient, default_table: Table):
+    table = client.get_table(
+        catalog=default_table.catalog_name,
+        schema=default_table.schema_name,
+        table=default_table.name,
+    )
+    assert table.name == default_table.name
+    assert table.catalog_name == default_table.catalog_name
+    assert table.schema_name == default_table.schema_name
+    assert table.table_type == default_table.table_type
+    assert table.file_type == default_table.file_type
+
+    assert table.storage_location is not None and table.storage_location != ""
+
+    assert len(table.columns) == len(default_table.columns)
+    for i in range(len(table.columns)):
+        assert table.columns[i].name == default_table.columns[i].name
+        assert table.columns[i].data_type == default_table.columns[i].data_type
+        assert table.columns[i].position == default_table.columns[i].position
+        assert table.columns[i].nullable == default_table.columns[i].nullable
