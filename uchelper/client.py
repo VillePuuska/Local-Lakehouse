@@ -2,6 +2,7 @@ import requests
 import polars as pl
 import duckdb
 from typing import Literal
+from deltalake.table import TableMerger
 from .exceptions import UnsupportedOperationError, DuckDBConnectionSetupError
 from .models import Catalog, Schema, Table, TableType, FileType
 from .dataframe import (
@@ -11,6 +12,7 @@ from .dataframe import (
     scan_table,
     write_table,
     df_schema_to_uc_schema,
+    merge_table,
 )
 from .uc_api_wrapper import (
     create_catalog,
@@ -328,7 +330,7 @@ class UCClient:
     ) -> None:
         """
         Writes the Polars DataFrame `df` to the Unity Catalog table
-        <catalog>.<schema>.<name>. If the table does not already exist, it is created.
+        `catalog.schema.name`. If the table does not already exist, it is created.
 
         `mode` specifies the writing mode:
             - WriteMode.APPEND to append to the existing table, IF it exists.
@@ -358,9 +360,33 @@ class UCClient:
             except Exception as e:
                 raise Exception("Something went horribly wrong.") from e
 
-    def merge_table(self) -> None:
-        # TODO
-        raise NotImplementedError
+    def merge_table(
+        self,
+        df: pl.DataFrame,
+        catalog: str,
+        schema: str,
+        name: str,
+        merge_condition: str | None = None,
+        source_alias: str = "s",
+        target_alias: str = "t",
+    ) -> TableMerger:
+        """
+        Creates a `TableMerger` to merge the Polars DataFrame `df` to the Unity Catalog table
+        `catalog.schema.name` with the condition `merge_condition`.
+
+        If `merge_condition` is not specified, then the default merge columns stored in Unity
+        Catalog are used.
+
+        This method only supports exactly matching schemas.
+        """
+        table = self.get_table(catalog=catalog, schema=schema, table=name)
+        return merge_table(
+            table=table,
+            df=df,
+            merge_condition=merge_condition,
+            source_alias=source_alias,
+            target_alias=target_alias,
+        )
 
     def create_as_table(
         self,

@@ -4,6 +4,7 @@ import time
 import uuid
 from enum import Enum
 from typing import Literal, cast
+from deltalake.table import TableMerger
 from .exceptions import UnsupportedOperationError, SchemaMismatchError
 from .models import Table, FileType, Column, DataType
 
@@ -169,9 +170,15 @@ def get_partition_columns(cols: list[Column]) -> list[Column]:
     return sorted(partition_cols, key=lambda x: x.partition_index)  # type: ignore
 
 
-def get_merge_condition() -> str:
-    # TODO
-    raise NotImplementedError
+def get_default_merge_condition(
+    table: Table, source_alias: str, target_alias: str
+) -> str:
+    default_cols = table.default_merge_columns
+    if len(default_cols) == 0:
+        raise Exception("Table does not have default_merge_columns set.")
+    return " AND ".join(
+        f"{source_alias}.{col} = {target_alias}.{col}" for col in default_cols
+    )
 
 
 def read_table(table: Table) -> pl.DataFrame:
@@ -463,6 +470,44 @@ def write_table(
             )
 
 
-def merge_table() -> None:
-    # TODO
-    raise NotImplementedError
+def merge_table(
+    table: Table,
+    df: pl.DataFrame,
+    merge_condition: str | None,
+    source_alias: str,
+    target_alias: str,
+) -> TableMerger:
+    """
+    Creates a `TableMerger` to merge the Polars DataFrame `df` to the Unity Catalog table
+    <catalog>.<schema>.<name> with the condition `merge_condition`.
+
+    If `merge_condition` is not specified, then the default merge columns stored in Unity
+    Catalog are used.
+
+    This method only supports exactly matching schemas.
+    """
+    path = table.storage_location
+    assert path is not None
+    if not path.startswith("file://"):
+        raise UnsupportedOperationError("Only local storage is supported.")
+    path = path.removeprefix("file://")
+
+    if table.file_type != FileType.DELTA:
+        raise UnsupportedOperationError("merge_table only supports DELTA tables.")
+
+    raise_for_schema_mismatch(df=df, uc=table.columns)
+
+    if merge_condition is None:
+        merge_condition = get_default_merge_condition(
+            table=table, source_alias=source_alias, target_alias=target_alias
+        )
+
+    return df.write_delta(
+        target=path,
+        mode="merge",
+        delta_merge_options={
+            "predicate": merge_condition,
+            "source_alias": source_alias,
+            "target_alias": target_alias,
+        },
+    )

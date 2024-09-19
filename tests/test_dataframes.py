@@ -648,3 +648,185 @@ def test_write_delta_table_merge_schema(
         ).union(set([("more_strings", DataType.STRING, None)])) == set(
             (col.name, col.data_type, col.partition_index) for col in table.columns
         )
+
+
+def test_merge_table(client: UCClient):
+    assert client.health_check()
+
+    default_catalog = "unity"
+    default_schema = "default"
+    table_name = "merge_test_table"
+
+    df1 = pl.DataFrame(
+        data={
+            "id": [0, 1, 2, 3, 4, 5],
+            "str_col": ["asd", "foo", "bar", "baz", "tmp", "mic check 123"],
+            "float_col": [0.1, 1.2, 3.4, 99.99, 123.321, -12.32],
+        },
+        schema={
+            "id": pl.Int64,
+            "str_col": pl.String,
+            "float_col": pl.Float64,
+        },
+    )
+    df2 = pl.DataFrame(
+        data={
+            "id": [0, 1, 6, 7],
+            "str_col": ["asddd", "foo", "bar", "baz"],
+            "float_col": [0.1, 11.2, 1.1, 2.2],
+        },
+        schema={
+            "id": pl.Int64,
+            "str_col": pl.String,
+            "float_col": pl.Float64,
+        },
+    )
+    df3 = pl.DataFrame(
+        data={
+            "id": [0, 1, 6, 7],
+            "str_col": ["hi", "mom", "bar", "baz"],
+            "float_col": [0.1, 11.2, 0.0, 0.0],
+        },
+        schema={
+            "id": pl.Int64,
+            "str_col": pl.String,
+            "float_col": pl.Float64,
+        },
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        client.create_as_table(
+            df=df1,
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name,
+            file_type="delta",
+            table_type="external",
+            location="file://" + tmpdir,
+        )
+        assert_frame_equal(
+            df1,
+            client.read_table(
+                catalog=default_catalog, schema=default_schema, name=table_name
+            ),
+            check_row_order=False,
+        )
+
+        with pytest.raises(Exception):
+            client.merge_table(
+                df=df2, catalog=default_catalog, schema=default_schema, name=table_name
+            )
+
+        client.set_table_default_merge_columns(
+            catalog=default_catalog,
+            schema=default_schema,
+            table=table_name,
+            merge_columns=["id"],
+        )
+        client.merge_table(
+            df=df2, catalog=default_catalog, schema=default_schema, name=table_name
+        ).when_not_matched_insert_all().execute()
+
+        result_first_merge = pl.DataFrame(
+            data={
+                "id": [0, 1, 2, 3, 4, 5, 6, 7],
+                "str_col": [
+                    "asd",
+                    "foo",
+                    "bar",
+                    "baz",
+                    "tmp",
+                    "mic check 123",
+                    "bar",
+                    "baz",
+                ],
+                "float_col": [0.1, 1.2, 3.4, 99.99, 123.321, -12.32, 1.1, 2.2],
+            },
+            schema={
+                "id": pl.Int64,
+                "str_col": pl.String,
+                "float_col": pl.Float64,
+            },
+        )
+        assert_frame_equal(
+            result_first_merge,
+            client.read_table(
+                catalog=default_catalog, schema=default_schema, name=table_name
+            ),
+            check_row_order=False,
+        )
+
+        client.set_table_default_merge_columns(
+            catalog=default_catalog,
+            schema=default_schema,
+            table=table_name,
+            merge_columns=["id", "str_col"],
+        )
+        client.merge_table(
+            df=df3, catalog=default_catalog, schema=default_schema, name=table_name
+        ).when_matched_update_all().when_not_matched_by_source_update(
+            updates={"float_col": "-111.0"}
+        ).execute()
+
+        result_second_merge = pl.DataFrame(
+            data={
+                "id": [0, 1, 2, 3, 4, 5, 6, 7],
+                "str_col": [
+                    "asd",
+                    "foo",
+                    "bar",
+                    "baz",
+                    "tmp",
+                    "mic check 123",
+                    "bar",
+                    "baz",
+                ],
+                "float_col": [-111.0, -111.0, -111.0, -111.0, -111.0, -111.0, 0.0, 0.0],
+            },
+            schema={
+                "id": pl.Int64,
+                "str_col": pl.String,
+                "float_col": pl.Float64,
+            },
+        )
+        assert_frame_equal(
+            result_second_merge,
+            client.read_table(
+                catalog=default_catalog, schema=default_schema, name=table_name
+            ),
+            check_row_order=False,
+        )
+
+        client.merge_table(
+            df=df3,
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name,
+            merge_condition="s.id = t.id",
+            source_alias="s",
+            target_alias="t",
+        ).when_not_matched_by_source_delete().execute()
+        result_third_merge = pl.DataFrame(
+            data={
+                "id": [0, 1, 6, 7],
+                "str_col": [
+                    "asd",
+                    "foo",
+                    "bar",
+                    "baz",
+                ],
+                "float_col": [-111.0, -111.0, 0.0, 0.0],
+            },
+            schema={
+                "id": pl.Int64,
+                "str_col": pl.String,
+                "float_col": pl.Float64,
+            },
+        )
+        assert_frame_equal(
+            result_third_merge,
+            client.read_table(
+                catalog=default_catalog, schema=default_schema, name=table_name
+            ),
+            check_row_order=False,
+        )
