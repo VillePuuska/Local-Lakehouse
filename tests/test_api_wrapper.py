@@ -1,5 +1,7 @@
 import tempfile
 import pytest
+import polars as pl
+from typing import Callable
 from uchelper import (
     UCClient,
     Catalog,
@@ -485,6 +487,104 @@ def test_overwrite_table(client: UCClient):
     overwrite_table(session=session, uc_url=uc_url, table=new_table)
 
     assert_table_matches(client, new_table)
+
+
+def test_sync_delta_properties(
+    client: UCClient,
+    random_df: Callable[[], pl.DataFrame],
+):
+    assert client.health_check()
+
+    default_catalog = "unity"
+    default_schema = "default"
+    table_name = "test_table"
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        df = random_df()
+
+        client.create_as_table(
+            df=df,
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name,
+            file_type="delta",
+            table_type="external",
+            location="file://" + tmpdir,
+        )
+
+        assert (
+            client.get_table(
+                catalog=default_catalog,
+                schema=default_schema,
+                table=table_name,
+            ).properties
+            == {}
+        )
+
+        dt = client.get_delta_table(
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name,
+        )
+        dt.alter.add_constraint(constraints={"id_positive": "id > 0"})
+
+        client.sync_delta_properties(
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name,
+        )
+
+        table = client.get_table(
+            catalog=default_catalog,
+            schema=default_schema,
+            table=table_name,
+        )
+        assert table.properties is not None
+        assert len(table.properties) == 1
+        props_list = [(k, v) for k, v in table.properties.items()]
+        assert props_list[0][0].startswith("delta.")
+        assert props_list[0][0].endswith("id_positive")
+        assert props_list[0][1] == "id > 0"
+
+        table.properties["asd"] = "foo"
+        client.update_table(catalog=default_catalog, schema=default_schema, table=table)
+        client.sync_delta_properties(
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name,
+        )
+
+        table = client.get_table(
+            catalog=default_catalog,
+            schema=default_schema,
+            table=table_name,
+        )
+        assert table.properties is not None
+        assert len(table.properties) == 2
+        props_list = [(k, v) for k, v in table.properties.items()]
+        assert (
+            props_list[0][0].startswith("delta.")
+            and props_list[0][0].endswith("id_positive")
+            and props_list[0][1] == "id > 0"
+        ) or (
+            props_list[1][0].startswith("delta.")
+            and props_list[1][0].endswith("id_positive")
+            and props_list[1][1] == "id > 0"
+        )
+
+        dt.alter.drop_constraint(name="id_positive")
+        client.sync_delta_properties(
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name,
+        )
+
+        table = client.get_table(
+            catalog=default_catalog,
+            schema=default_schema,
+            table=table_name,
+        )
+        assert table.properties == {"asd": "foo"}
 
 
 def assert_table_matches(client: UCClient, default_table: Table):

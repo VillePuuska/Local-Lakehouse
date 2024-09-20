@@ -2,8 +2,9 @@
 Functions for handling calling Unity Catalog REST API endpoints and parsing results.
 """
 
-from .exceptions import AlreadyExistsError, DoesNotExistError
+from .exceptions import AlreadyExistsError, DoesNotExistError, UnsupportedOperationError
 from .models import *
+from deltalake import DeltaTable
 import requests
 import json
 
@@ -546,4 +547,26 @@ def set_table_default_merge_columns(
         catalog=catalog,
         schema=schema,
         table=existing_table,
+    )
+
+
+def sync_delta_properties(
+    session: requests.Session,
+    uc_url: str,
+    catalog: str,
+    schema: str,
+    table: Table,
+) -> Table:
+    if table.file_type != FileType.DELTA:
+        raise UnsupportedOperationError("The table is not DELTA.")
+    assert table.storage_location is not None
+    if table.properties is None:
+        table.properties = {}
+    dt = DeltaTable(table_uri=table.storage_location)
+    table.properties = {
+        k: v for k, v in table.properties.items() if not k.startswith("delta.")
+    }
+    table.properties.update(dt.metadata().configuration)
+    return update_table(
+        session=session, uc_url=uc_url, catalog=catalog, schema=schema, table=table
     )

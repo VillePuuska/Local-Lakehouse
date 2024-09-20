@@ -2,6 +2,7 @@ import requests
 import polars as pl
 import duckdb
 from typing import Literal
+from deltalake import DeltaTable
 from deltalake.table import TableMerger
 from .exceptions import UnsupportedOperationError, DuckDBConnectionSetupError
 from .models import Catalog, Schema, Table, TableType, FileType
@@ -33,6 +34,7 @@ from .uc_api_wrapper import (
     overwrite_table,
     update_table,
     set_table_default_merge_columns,
+    sync_delta_properties,
 )
 from .utils import (
     literal_to_filetype,
@@ -316,6 +318,32 @@ class UCClient:
         """
         table = self.get_table(catalog=catalog, schema=schema, table=name)
         return scan_table(table=table)
+
+    def get_delta_table(self, catalog: str, schema: str, name: str) -> DeltaTable:
+        """
+        Returns the specified table from Unity Catalog as a `DeltaTable`.
+        """
+        table = self.get_table(catalog=catalog, schema=schema, table=name)
+        if table.file_type != FileType.DELTA:
+            raise UnsupportedOperationError(
+                "Can't return a DeltaTable since the table is not DELTA."
+            )
+        assert table.storage_location is not None
+        return DeltaTable(table_uri=table.storage_location)
+
+    def sync_delta_properties(self, catalog: str, schema: str, name: str) -> Table:
+        """
+        Syncs the properties of the underlying Delta table with Unity Catalog.
+        These are the properties starting with 'delta.'
+        """
+        table = self.get_table(catalog=catalog, schema=schema, table=name)
+        return sync_delta_properties(
+            session=self.session,
+            uc_url=self.uc_url,
+            catalog=catalog,
+            schema=schema,
+            table=table,
+        )
 
     def write_table(
         self,
