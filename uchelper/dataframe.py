@@ -196,11 +196,8 @@ def read_table(table: Table) -> pl.DataFrame:
             if len(partition_cols) == 0:
                 df = pl.read_parquet(source=path)
             else:
-                # TODO: There HAS to be a nicer way to do this. Try with Polars >1.0?
                 df = pl.read_parquet(
-                    source=os.path.join(
-                        path, *["**" for _ in range(len(partition_cols))], "*.parquet"
-                    ),
+                    source=path,
                     hive_partitioning=True,
                     hive_schema={
                         col.name: uc_type_to_polars_type(col.data_type)
@@ -239,11 +236,8 @@ def scan_table(table: Table) -> pl.LazyFrame:
             if len(partition_cols) == 0:
                 df = pl.scan_parquet(source=path)
             else:
-                # TODO: There HAS to be a nicer way to do this. Try with Polars >1.0?
                 df = pl.scan_parquet(
-                    source=os.path.join(
-                        path, *["**" for _ in range(len(partition_cols))], "*.parquet"
-                    ),
+                    source=path,
                     hive_partitioning=True,
                     hive_schema={
                         col.name: uc_type_to_polars_type(col.data_type)
