@@ -550,19 +550,37 @@ def set_table_default_merge_columns(
     )
 
 
+def get_delta_table(
+    table: Table,
+) -> DeltaTable:
+    """
+    Helper function to return a `Table` as a `DeltaTable`.
+
+    Raises an `UnsupportedOperationError` if the table is not DELTA.
+    """
+    if table.file_type != FileType.DELTA:
+        raise UnsupportedOperationError("The table is not DELTA.")
+    assert table.storage_location is not None
+    return DeltaTable(table_uri=table.storage_location)
+
+
 def sync_delta_properties(
     session: requests.Session,
     uc_url: str,
     catalog: str,
     schema: str,
-    table: Table,
+    name: str,
 ) -> Table:
-    if table.file_type != FileType.DELTA:
-        raise UnsupportedOperationError("The table is not DELTA.")
-    assert table.storage_location is not None
+    """
+    Syncs the properties of the underlying Delta table with Unity Catalog.
+    These are the properties starting with 'delta.'
+    """
+    table = get_table(
+        session=session, uc_url=uc_url, catalog=catalog, schema=schema, table=name
+    )
+    dt = get_delta_table(table=table)
     if table.properties is None:
         table.properties = {}
-    dt = DeltaTable(table_uri=table.storage_location)
     table.properties = {
         k: v for k, v in table.properties.items() if not k.startswith("delta.")
     }

@@ -35,6 +35,7 @@ from .uc_api_wrapper import (
     update_table,
     set_table_default_merge_columns,
     sync_delta_properties,
+    get_delta_table,
 )
 from .utils import (
     literal_to_filetype,
@@ -322,27 +323,29 @@ class UCClient:
     def get_delta_table(self, catalog: str, schema: str, name: str) -> DeltaTable:
         """
         Returns the specified table from Unity Catalog as a `DeltaTable`.
+
+        Raises an `UnsupportedOperationError` if the table is not DELTA.
         """
         table = self.get_table(catalog=catalog, schema=schema, table=name)
-        if table.file_type != FileType.DELTA:
-            raise UnsupportedOperationError(
-                "Can't return a DeltaTable since the table is not DELTA."
-            )
-        assert table.storage_location is not None
-        return DeltaTable(table_uri=table.storage_location)
+        return get_delta_table(table=table)
 
     def sync_delta_properties(self, catalog: str, schema: str, name: str) -> Table:
         """
         Syncs the properties of the underlying Delta table with Unity Catalog.
         These are the properties starting with 'delta.'
+
+        Note: this sync only goes one way: Delta table -> Unity Catalog.
+        If you need to add delta properties to the underlying Delta table,
+        get the table as a `DeltaTable` with `get_delta_table`, use the
+        `DeltaTable` to make your changes, and finally sync with Unity Catalog
+        with this method.
         """
-        table = self.get_table(catalog=catalog, schema=schema, table=name)
         return sync_delta_properties(
             session=self.session,
             uc_url=self.uc_url,
             catalog=catalog,
             schema=schema,
-            table=table,
+            name=name,
         )
 
     def write_table(
