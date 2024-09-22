@@ -830,3 +830,280 @@ def test_merge_table(client: UCClient):
             ),
             check_row_order=False,
         )
+
+
+@pytest.mark.parametrize(
+    "partitioned",
+    [True, False],
+)
+def test_replace_where(
+    client: UCClient,
+    partitioned: bool,
+):
+    assert client.health_check()
+
+    default_catalog = "unity"
+    default_schema = "default"
+    table_name = "test_table"
+
+    df1 = pl.DataFrame(
+        data={
+            "id": [0, 1, 2, 3, 4, 5],
+            "str_col": ["asd", "foo", "bar", "baz", "tmp", "mic check 123"],
+            "float_col": [0.1, 1.2, 3.4, 99.99, 123.321, -12.32],
+        },
+        schema={
+            "id": pl.Int64,
+            "str_col": pl.String,
+            "float_col": pl.Float64,
+        },
+    )
+    df2 = pl.DataFrame(
+        data={
+            "id": [0, 0, 0, 0],
+            "str_col": ["asddd", "foo", "bar", "baz"],
+            "float_col": [0.1, 11.2, 1.1, 2.2],
+        },
+        schema={
+            "id": pl.Int64,
+            "str_col": pl.String,
+            "float_col": pl.Float64,
+        },
+    )
+    df3 = pl.DataFrame(
+        data={
+            "id": [6, 7],
+            "str_col": ["hiiiii", "mommmm"],
+            "float_col": [0.1, 11.2],
+        },
+        schema={
+            "id": pl.Int64,
+            "str_col": pl.String,
+            "float_col": pl.Float64,
+        },
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        if not partitioned:
+            client.create_as_table(
+                df=df1,
+                catalog=default_catalog,
+                schema=default_schema,
+                name=table_name,
+                file_type="delta",
+                table_type="external",
+                location="file://" + tmpdir,
+            )
+        else:
+            client.create_as_table(
+                df=df1,
+                catalog=default_catalog,
+                schema=default_schema,
+                name=table_name,
+                file_type="delta",
+                table_type="external",
+                location="file://" + tmpdir,
+                partition_cols=["id"],
+            )
+
+        df = client.read_table(
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name,
+        )
+        assert_frame_equal(df, df1, check_row_order=False)
+
+        client.write_table(
+            df=df2,
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name,
+            mode="overwrite",
+            replace_where="id = 0",
+        )
+        expected = pl.DataFrame(
+            data={
+                "id": [0, 0, 0, 0, 1, 2, 3, 4, 5],
+                "str_col": [
+                    "asddd",
+                    "foo",
+                    "bar",
+                    "baz",
+                    "foo",
+                    "bar",
+                    "baz",
+                    "tmp",
+                    "mic check 123",
+                ],
+                "float_col": [0.1, 11.2, 1.1, 2.2, 1.2, 3.4, 99.99, 123.321, -12.32],
+            },
+            schema={
+                "id": pl.Int64,
+                "str_col": pl.String,
+                "float_col": pl.Float64,
+            },
+        )
+        df = client.read_table(
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name,
+        )
+        assert_frame_equal(df, expected, check_row_order=False)
+
+        client.write_table(
+            df=df3,
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name,
+            mode="overwrite",
+            replace_where="id > 4 AND length(str_col) > 3",
+        )
+        expected = pl.DataFrame(
+            data={
+                "id": [0, 0, 0, 0, 1, 2, 3, 4, 6, 7],
+                "str_col": [
+                    "asddd",
+                    "foo",
+                    "bar",
+                    "baz",
+                    "foo",
+                    "bar",
+                    "baz",
+                    "tmp",
+                    "hiiiii",
+                    "mommmm",
+                ],
+                "float_col": [0.1, 11.2, 1.1, 2.2, 1.2, 3.4, 99.99, 123.321, 0.1, 11.2],
+            },
+            schema={
+                "id": pl.Int64,
+                "str_col": pl.String,
+                "float_col": pl.Float64,
+            },
+        )
+        df = client.read_table(
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name,
+        )
+        assert_frame_equal(df, expected, check_row_order=False)
+
+
+def test_partition_filters(
+    client: UCClient,
+):
+    assert client.health_check()
+
+    default_catalog = "unity"
+    default_schema = "default"
+    table_name = "test_table"
+
+    df1 = pl.DataFrame(
+        data={
+            "id": [0, 0, 0, 1, 1, 2],
+            "str_col": ["asd", "asd", "foo", "asd", "foo", "baz"],
+            "float_col": [0.1, 1.2, 3.4, 99.99, 123.321, -12.32],
+        },
+        schema={
+            "id": pl.Int64,
+            "str_col": pl.String,
+            "float_col": pl.Float64,
+        },
+    )
+    df2 = pl.DataFrame(
+        data={
+            "id": [0, 0, 0, 0],
+            "str_col": ["asddd", "foo", "bar", "baz"],
+            "float_col": [0.1, 11.2, 1.1, 2.2],
+        },
+        schema={
+            "id": pl.Int64,
+            "str_col": pl.String,
+            "float_col": pl.Float64,
+        },
+    )
+    df3 = pl.DataFrame(
+        data={
+            "id": [6, 7],
+            "str_col": ["hiiiii", "mommmm"],
+            "float_col": [0.1, 11.2],
+        },
+        schema={
+            "id": pl.Int64,
+            "str_col": pl.String,
+            "float_col": pl.Float64,
+        },
+    )
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        client.create_as_table(
+            df=df1,
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name,
+            file_type="delta",
+            table_type="external",
+            location="file://" + tmpdir,
+            partition_cols=["id", "str_col"],
+        )
+
+        df = client.read_table(
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name,
+        )
+        assert_frame_equal(df, df1, check_row_order=False)
+
+        client.write_table(
+            df=df2,
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name,
+            mode="overwrite",
+            partition_filters=[("id", "=", "0")],
+        )
+        expected = pl.DataFrame(
+            data={
+                "id": [0, 0, 0, 0, 1, 1, 2],
+                "str_col": ["asddd", "foo", "bar", "baz", "asd", "foo", "baz"],
+                "float_col": [0.1, 11.2, 1.1, 2.2, 99.99, 123.321, -12.32],
+            },
+            schema={
+                "id": pl.Int64,
+                "str_col": pl.String,
+                "float_col": pl.Float64,
+            },
+        )
+        df = client.read_table(
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name,
+        )
+        assert_frame_equal(df, expected, check_row_order=False)
+
+        client.write_table(
+            df=df3,
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name,
+            mode="overwrite",
+            partition_filters=[("id", ">", "0"), ("str_col", "!=", "asd")],
+        )
+        expected = pl.DataFrame(
+            data={
+                "id": [0, 0, 0, 0, 1, 6, 7],
+                "str_col": ["asddd", "foo", "bar", "baz", "asd", "hiiiii", "mommmm"],
+                "float_col": [0.1, 11.2, 1.1, 2.2, 99.99, 0.1, 11.2],
+            },
+            schema={
+                "id": pl.Int64,
+                "str_col": pl.String,
+                "float_col": pl.Float64,
+            },
+        )
+        df = client.read_table(
+            catalog=default_catalog,
+            schema=default_schema,
+            name=table_name,
+        )
+        assert_frame_equal(df, expected, check_row_order=False)
