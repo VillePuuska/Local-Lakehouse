@@ -312,7 +312,7 @@ def write_table(
                 ]
             df.write_delta(
                 target=path,
-                mode=cast(Literal["append", "overwrite"], mode),
+                mode=cast(Literal["append", "overwrite"], mode.value.lower()),
                 delta_write_options=delta_write_options,
             )
             if schema_evolution != SchemaEvolution.STRICT:
