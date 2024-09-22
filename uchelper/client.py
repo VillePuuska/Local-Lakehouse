@@ -1,7 +1,7 @@
 import requests
 import polars as pl
 import duckdb
-from typing import Literal
+from typing import Literal, Any
 from deltalake import DeltaTable
 from deltalake.table import TableMerger
 from .exceptions import UnsupportedOperationError, DuckDBConnectionSetupError
@@ -358,6 +358,8 @@ class UCClient:
         schema_evolution: (
             Literal["strict", "merge", "overwrite"] | SchemaEvolution
         ) = SchemaEvolution.STRICT,
+        partition_filters: list[tuple[str, str, Any]] | None = None,
+        replace_where: str | None = None,
     ) -> None:
         """
         Writes the Polars DataFrame `df` to the Unity Catalog table
@@ -382,7 +384,12 @@ class UCClient:
             mode = literal_to_writemode(mode)
         table = self.get_table(catalog=catalog, schema=schema, table=name)
         new_columns = write_table(
-            table=table, df=df, mode=mode, schema_evolution=schema_evolution
+            table=table,
+            df=df,
+            mode=mode,
+            schema_evolution=schema_evolution,
+            partition_filters=partition_filters,
+            replace_where=replace_where,
         )
         if new_columns is not None:
             try:

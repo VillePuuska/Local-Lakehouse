@@ -298,18 +298,37 @@ def write_table(
         case FileType.DELTA, _, _:
             if schema_evolution == SchemaEvolution.STRICT:
                 raise_for_schema_mismatch(df=df, uc=table.columns)
-            partition_cols = get_partition_columns(table.columns)
+
             delta_write_options: dict[str, Any] = {
                 "engine": "rust",
             }
+
             if schema_evolution == SchemaEvolution.OVERWRITE:
                 delta_write_options["schema_mode"] = "overwrite"
             elif schema_evolution == SchemaEvolution.MERGE:
                 delta_write_options["schema_mode"] = "merge"
+
+            partition_cols = get_partition_columns(table.columns)
             if len(partition_cols) > 0:
                 delta_write_options["partition_by"] = [
                     col.name for col in partition_cols
                 ]
+
+            if (
+                mode == WriteMode.OVERWRITE
+                and partition_filters is not None
+                and replace_where is not None
+            ):
+                raise UnsupportedOperationError(
+                    "partition_filters and replace_where cannot be used together."
+                )
+            elif mode == WriteMode.OVERWRITE and partition_filters is not None:
+                # partition_filters are only supported with PyArrow engine
+                delta_write_options["engine"] = "pyarrow"
+                delta_write_options["partition_filters"] = partition_filters
+            elif mode == WriteMode.OVERWRITE and replace_where is not None:
+                delta_write_options["predicate"] = replace_where
+
             df.write_delta(
                 target=path,
                 mode=cast(Literal["append", "overwrite"], mode.value.lower()),
