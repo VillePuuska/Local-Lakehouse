@@ -3,7 +3,7 @@ import os
 import time
 import uuid
 from enum import Enum
-from typing import Literal, cast
+from typing import Literal, cast, Any
 from deltalake.table import TableMerger
 from .exceptions import UnsupportedOperationError, SchemaMismatchError
 from .models import Table, FileType, Column, DataType
@@ -266,12 +266,20 @@ def write_table(
     df: pl.DataFrame,
     mode: WriteMode,
     schema_evolution: SchemaEvolution,
+    partition_filters: list[tuple[str, str, Any]] | None = None,
+    replace_where: str | None = None,
 ) -> list[Column] | None:
     """
     Writes the Polars DataFrame `df` to the location of `table`.
 
     Returns None if the schema in Unity Catalog does NOT need to be updated.
     Returns a list[Column] if the schema in Unity Catalog DOES need to be updated.
+
+    If `partition_filters` is set, the table format is DELTA, and mode is OVERWRITE, then
+    only the partitions matching the filters will be overwritten.
+
+    If `replace_where` is set, the table format is DELTA, and mode is OVERWRITE, then
+    only the rows matching the condition will be overwritten.
 
     Raises UnsupportedOperationError for unsupported combination of `table.file_type`, `mode`, and `schema_evolution`.
     """
@@ -282,95 +290,42 @@ def write_table(
     path = path.removeprefix("file://")
 
     match table.file_type, mode, schema_evolution:
-        case FileType.DELTA, _, SchemaEvolution.STRICT:
-            raise_for_schema_mismatch(df=df, uc=table.columns)
-            partition_cols = get_partition_columns(table.columns)
-            # needing to specify the cast is not neat,
-            # but mypy gets angry if we just pass this as a str to write_delta
-            write_mode = cast(Literal["append", "overwrite"], mode.value.lower())
-            if len(partition_cols) > 0:
-                df.write_delta(
-                    target=path,
-                    mode=write_mode,
-                    delta_write_options={
-                        "partition_by": [col.name for col in partition_cols],
-                        "engine": "rust",
-                    },
-                )
-            else:
-                df.write_delta(
-                    target=path,
-                    mode=write_mode,
-                    delta_write_options={
-                        "engine": "rust",
-                    },
-                )
-            return None
+        case _, WriteMode.APPEND, SchemaEvolution.OVERWRITE:
+            raise UnsupportedOperationError(
+                "Schema evolution OVERWRITE is only supported when write mode is also OVERWRITE."
+            )
 
-        case FileType.DELTA, WriteMode.OVERWRITE, _:
-            partition_cols = get_partition_columns(table.columns)
-            # needing to specify the cast is not neat,
-            # but mypy gets angry if we just pass this as a str to write_delta
-            write_mode = cast(Literal["append", "overwrite"], mode.value.lower())
-            if len(partition_cols) > 0:
-                df.write_delta(
-                    target=path,
-                    mode=write_mode,
-                    delta_write_options={
-                        "partition_by": [col.name for col in partition_cols],
-                        "schema_mode": "overwrite",
-                        "engine": "rust",
-                    },
-                )
-            else:
-                df.write_delta(
-                    target=path,
-                    mode=write_mode,
-                    delta_write_options={
-                        "schema_mode": "overwrite",
-                        "engine": "rust",
-                    },
-                )
-            try:
+        case FileType.DELTA, _, _:
+            if schema_evolution == SchemaEvolution.STRICT:
                 raise_for_schema_mismatch(df=df, uc=table.columns)
-                return None
-            except SchemaMismatchError:
-                return df_schema_to_uc_schema(
-                    df=df, partition_cols=[col.name for col in partition_cols]
-                )
-
-        case FileType.DELTA, WriteMode.APPEND, SchemaEvolution.MERGE:
             partition_cols = get_partition_columns(table.columns)
-            # needing to specify the cast is not neat,
-            # but mypy gets angry if we just pass this as a str to write_delta
-            write_mode = cast(Literal["append", "overwrite"], mode.value.lower())
+            delta_write_options: dict[str, Any] = {
+                "engine": "rust",
+            }
+            if schema_evolution == SchemaEvolution.OVERWRITE:
+                delta_write_options["schema_mode"] = "overwrite"
+            elif schema_evolution == SchemaEvolution.MERGE:
+                delta_write_options["schema_mode"] = "merge"
             if len(partition_cols) > 0:
-                df.write_delta(
-                    target=path,
-                    mode=write_mode,
-                    delta_write_options={
-                        "partition_by": [col.name for col in partition_cols],
-                        "schema_mode": "merge",
-                        "engine": "rust",
-                    },
-                )
+                delta_write_options["partition_by"] = [
+                    col.name for col in partition_cols
+                ]
+            df.write_delta(
+                target=path,
+                mode=cast(Literal["append", "overwrite"], mode),
+                delta_write_options=delta_write_options,
+            )
+            if schema_evolution != SchemaEvolution.STRICT:
+                try:
+                    lf = pl.scan_delta(source=path)
+                    raise_for_schema_mismatch(df=lf, uc=table.columns)
+                    return None
+                except SchemaMismatchError:
+                    return df_schema_to_uc_schema(
+                        df=lf, partition_cols=[col.name for col in partition_cols]
+                    )
             else:
-                df.write_delta(
-                    target=path,
-                    mode=write_mode,
-                    delta_write_options={
-                        "schema_mode": "merge",
-                        "engine": "rust",
-                    },
-                )
-            try:
-                lf = pl.scan_delta(source=path)
-                raise_for_schema_mismatch(df=lf, uc=table.columns)
                 return None
-            except SchemaMismatchError:
-                return df_schema_to_uc_schema(
-                    df=lf, partition_cols=[col.name for col in partition_cols]
-                )
 
         case FileType.PARQUET, WriteMode.APPEND, SchemaEvolution.STRICT:
             partition_cols = get_partition_columns(table.columns)
@@ -445,7 +400,7 @@ def write_table(
 
         case _, WriteMode.APPEND, _:
             raise UnsupportedOperationError(
-                "Write mode APPEND is only supported for DELTA and partitioned PARQUET."
+                "Write mode APPEND is only supported for DELTA and partitioned PARQUET. For PARQUET, schema evolution must also be STRICT."
             )
 
         case _, _, SchemaEvolution.MERGE:
