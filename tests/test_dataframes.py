@@ -5,7 +5,7 @@ from polars.testing import assert_frame_equal, assert_frame_not_equal
 import deltalake
 import tempfile
 import pytest
-from typing import Callable
+from typing import Callable, Literal, cast
 from uchelper import (
     UCClient,
     Column,
@@ -451,13 +451,16 @@ def test_create_as_table(
                 location="file://" + filepath,
             )
         else:
+            ft = cast(Literal["delta", "parquet"], file_type.value.lower())
+            assert ft in ["delta", "parquet"]
+
             df = random_partitioned_df()
             client.create_as_table(
                 df=df,
                 catalog=default_catalog,
                 schema=default_schema,
                 name=table_name,
-                file_type=file_type.value.lower(),  # test this works with string literal as well
+                file_type=ft,  # test this works with string literal as well
                 table_type="external",
                 location="file://" + filepath,
                 partition_cols=["part1", "part2"],
@@ -545,6 +548,8 @@ def test_register_as_table(
                 filepath = os.path.join(tmpdir, "iuaevbaerv.avro")
                 df = random_df()
                 df.write_avro(file=filepath)
+            case _:
+                raise Exception("Impossible codepath")
 
         client.register_as_table(
             filepath=filepath,

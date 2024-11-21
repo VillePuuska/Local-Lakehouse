@@ -453,6 +453,9 @@ class UCClient:
             raise UnsupportedOperationError(
                 "To create an EXTERNAL table, you must specify a location to store it in."
             )
+        assert (
+            location is not None
+        )  # Logically impossible, but Pyright can't figure this out; mypy actually can
         if not location.startswith("file://"):
             raise UnsupportedOperationError(
                 "Only local storage is supported. Hint: location must be of the form file://<absolute_path>, e.g. file:///home/me/ex-delta-table"

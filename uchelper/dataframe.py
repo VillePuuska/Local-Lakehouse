@@ -26,7 +26,14 @@ def polars_type_to_uc_type(t: pl.DataType) -> tuple[DataType, int, int]:
     """
     match t:
         case pl.Decimal:
-            return (DataType.DECIMAL, t.precision, t.scale)
+            return (
+                DataType.DECIMAL,
+                # Polars allows precision to be None, we just use 0 as default.
+                # How did mypy not notice that precision could be None?
+                # TODO: figure out what to actually do in this case.
+                t.precision if t.precision is not None else 0,
+                t.scale,
+            )
         case pl.Float32:
             return (DataType.FLOAT, 0, 0)
         case pl.Float64:
@@ -335,8 +342,8 @@ def write_table(
                 delta_write_options=delta_write_options,
             )
             if schema_evolution != SchemaEvolution.STRICT:
+                lf = pl.scan_delta(source=path)
                 try:
-                    lf = pl.scan_delta(source=path)
                     raise_for_schema_mismatch(df=lf, uc=table.columns)
                     return None
                 except SchemaMismatchError:
